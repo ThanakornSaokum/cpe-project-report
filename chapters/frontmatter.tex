@@ -3,39 +3,55 @@
 
 \ifproject
 \begin{abstractTH}
-เขียนบทคัดย่อของโครงงานที่นี่
-
-การเขียนรายงานเป็นส่วนหนึ่งของการทำโครงงานวิศวกรรมคอมพิวเตอร์
-เพื่อทบทวนทฤษฎีที่เกี่ยวข้อง อธิบายขั้นตอนวิธีแก้ปัญหาเชิงวิศวกรรม และวิเคราะห์และสรุปผลการทดลองอุปกรณ์และระบบต่างๆ
-\enskip อย่างไรก็ดี การสร้างรูปเล่มรายงานให้ถูกรูปแบบนั้นเป็นขั้นตอนที่ยุ่งยาก
-แม้ว่าจะมีต้นแบบสำหรับใช้ในโปรแกรม Microsoft Word แล้วก็ตาม
-แต่นักศึกษาส่วนใหญ่ยังคงค้นพบว่าการใช้งานมีความซับซ้อน และเกิดความผิดพลาดในการจัดรูปแบบ กำหนดเลขหัวข้อ และสร้างสารบัญอยู่
-\enskip ภาควิชาวิศวกรรมคอมพิวเตอร์จึงได้จัดทำต้นแบบรูปเล่มรายงานโดยใช้ระบบจัดเตรียมเอกสาร
-\LaTeX{} เพื่อช่วยให้นักศึกษาเขียนรายงานได้อย่างสะดวกและรวดเร็วมากยิ่งขึ้น
+โครงงานนี้ประเมินแนวทางการสร้าง Investigation Context จาก Security Logs ในระบบ SIEM
+ก่อนส่งให้โมเดลภาษาขนาดใหญ่ (LLM) วิเคราะห์ เพื่อแก้ปัญหาข้อมูลจำนวนมาก, Noise
+และต้นทุน Token ที่สูงจากการใช้ Raw Logs โดยตรง
+โครงงานพัฒนา Context Construction Pipeline ที่คัดกรองและจัดรูปแบบเฉพาะข้อมูลที่เกี่ยวข้องกับเหตุการณ์
+ร่วมกับการอ้างอิงองค์ความรู้จาก MITRE ATT\&CK เพื่อให้ LLM ขนาดเล็กที่ใช้ทำงานภายในเครื่อง
+สามารถระบุเทคนิคการโจมตีได้อย่างแม่นยำ
+ผลลัพธ์จะถูกนำเสนอเป็นรายงานการสืบสวน (Investigation Report) ผ่าน Web Dashboard
+เพื่อช่วยให้ SOC Analyst ลดเวลาในการสืบสวนเหตุการณ์ และลดต้นทุนในการใช้ LLM
+โดยยังคงหลักฐานที่จำเป็นต่อการวิเคราะห์ไว้ครบถ้วน
 \end{abstractTH}
 
 \begin{abstract}
-The abstract would be placed here. It usually does not exceed 350 words
-long (not counting the heading), and must not take up more than one (1) page
-(even if fewer than 350 words long).
-
-Make sure your abstract sits inside the \texttt{abstract} environment.
+This project evaluates approaches for constructing an investigation context from
+security logs collected by a Security Information and Event Management (SIEM) system
+before they are analyzed by a large language model (LLM).
+Feeding raw logs directly to an LLM is problematic because of the large data volume,
+the amount of irrelevant information (noise), and the resulting high token cost.
+We develop a Context Construction Pipeline that normalizes the logs, selects only the
+events related to the alerted incident, and formats them in a compact representation,
+combined with knowledge retrieved from the MITRE ATT\&CK framework, so that a small
+LLM running locally can accurately identify the attack technique.
+The analysis is presented as an investigation report on a web dashboard, helping SOC
+analysts reduce investigation time and LLM usage cost while preserving the evidence
+required for the analysis.
 \end{abstract}
 
 \iffalse
 \begin{dedication}
-This document is dedicated to all Chiang Mai University students.
-
 Dedication page is optional.
 \end{dedication}
 \fi % \iffalse
 
-\begin{acknowledgments}
-Your acknowledgments go here. Make sure it sits inside the
-\texttt{acknowledgment} environment.
+% \begin{acknowledgments}
+% โครงงานนี้สำเร็จลุล่วงได้ด้วยความกรุณาจาก ผศ.ดร.ยุทธพงษ์ สมจิต อาจารย์ที่ปรึกษาโครงงาน
+% ที่ได้สละเวลาให้คำปรึกษา ข้อเสนอแนะ และแนวทางในการดำเนินงานตลอดระยะเวลาการทำโครงงาน
+% คณะผู้จัดทำขอกราบขอบพระคุณเป็นอย่างสูงมา ณ ที่นี้
 
-\acksign{2020}{5}{25}
-\end{acknowledgments}%
+% ขอขอบพระคุณคณะกรรมการสอบโครงงาน ได้แก่ รศ.ดร.ตรัสพงศ์ ไทยอุปถัมภ์
+% ผศ.ดร.ศศิน จันทร์พวงทอง และ ผศ.ดร.กานต์ ปทานุคม
+% ที่ได้ให้คำถามและข้อเสนอแนะอันเป็นประโยชน์ระหว่างการนำเสนอ
+% ซึ่งช่วยให้คณะผู้จัดทำปรับปรุงการนิยามปัญหา ขอบเขต และวิธีการทดลองให้ชัดเจนยิ่งขึ้น
+
+% ขอขอบคุณภาควิชาวิศวกรรมคอมพิวเตอร์ คณะวิศวกรรมศาสตร์ มหาวิทยาลัยเชียงใหม่
+% ที่ให้ความรู้และสนับสนุนการทำโครงงาน
+% รวมถึงผู้พัฒนาชุดข้อมูลสาธารณะ Splunk Attack Data และ OTRF Security-Datasets
+% ที่ทำให้การทดลองในโครงงานนี้เป็นไปได้
+
+% \acksign{2026}{10}{22}
+% \end{acknowledgments}%
 \fi % \ifproject
 
 \contentspage
@@ -45,9 +61,3 @@ Your acknowledgments go here. Make sure it sits inside the
 
 \tablelistpage
 \fi % \ifproject
-
-% \abbrlist % this page is optional
-
-% \symlist % this page is optional
-
-% \preface % this section is optional
