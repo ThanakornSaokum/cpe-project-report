@@ -4,4 +4,125 @@
 \ifenglish System Evaluation\else การประเมินระบบ\fi
 \fi}
 
-ในบทนี้จะทดสอบเกี่ยวกับการทำงานในฟังก์ชันหลักๆ
+ในบทนี้นำเสนอการทดลองเบื้องต้นที่ดำเนินการแล้ว ได้แก่
+(1) การทดลองส่ง Raw Logs ให้ LLM เชิงพาณิชย์วิเคราะห์โดยตรง เพื่อยืนยันปัญหาของโครงงาน
+(2) การทดลองเพื่อตอบคำถามว่า LLM ขนาดเล็กยังจำเป็นต้องใช้ RAG หรือไม่
+และ (3) แผนการทดลองและการประเมินผลในขั้นต่อไป
+
+\section{การทดลองเบื้องต้น: ส่ง Raw Logs ให้ LLM วิเคราะห์โดยตรง}
+
+\subsection{วิธีการทดลอง}
+ดึง Windows Sysmon Logs ของชุดข้อมูล T1087.001 จาก Splunk ผ่าน API ได้เป็นไฟล์ JSON
+แล้วอัปโหลดไฟล์ให้ LLM เชิงพาณิชย์ 3 โมเดลวิเคราะห์โดยตรง
+ด้วยคำถามว่า ``นี่คือ Attack Technique อะไร เพราะอะไรถึงคิดแบบนั้น''
+คำตอบที่คาดหวังคือ Account Discovery: Local Account (T1087.001)
+
+\subsection{ผลการทดลอง}
+\begin{table}[ht]
+  \centering
+  \caption{ผลการส่ง Raw Logs ของ T1087.001 ให้ LLM เชิงพาณิชย์วิเคราะห์โดยตรง}
+  \label{tab:raw-llm}
+  \begin{tabular}{|L{0.25\textwidth}|L{0.45\textwidth}|L{0.17\textwidth}|}
+    \hline
+    \textbf{โมเดล} & \textbf{คำตอบ} & \textbf{ผล} \\ \hline
+    GPT-5.6 Luna      & T1003 OS Credential Dumping & ผิด \\ \hline
+    Gemini 3.1 Pro    & ไม่พบพฤติกรรมการโจมตีที่ชัดเจน (Logs เป็นเพียงการทำงานของ Splunk Agent) & ผิด \\ \hline
+    Claude Sonnet 5 (High) & T1087 Account Discovery & ถูกระดับ Technique \\ \hline
+  \end{tabular}
+\end{table}
+
+จากตารางที่~\ref{tab:raw-llm} พบว่าแม้เป็นโมเดลขนาดใหญ่ แต่เมื่อได้รับ Raw Logs ที่มี Noise จำนวนมาก
+บางโมเดลถูกดึงความสนใจไปที่ Events ที่ไม่เกี่ยวข้อง (เช่น การเข้าถึง Process ของ Splunk Agent)
+และไม่มีโมเดลใดระบุถึงระดับ Sub-technique ได้ถูกต้อง
+ผลนี้สนับสนุนสมมติฐานว่าการสร้าง Investigation Context ที่คัดกรองแล้วมีความจำเป็น
+
+\section{การทดลอง: ความจำเป็นของ RAG สำหรับ LLM ขนาดเล็ก}
+
+\subsection{วัตถุประสงค์และการตั้งค่า}
+เพื่อทดสอบว่า เมื่อผ่าน Event Selection แล้ว LLM ขนาดเล็ก (Qwen3.5:9B) ยังต้องใช้ RAG หรือไม่
+และ Query แบบใดเหมาะกับการค้นหาในฐานความรู้
+Input ของการทดลองคือผลลัพธ์จาก Event Selection แบบ Top-$k$ ของชุดข้อมูล T1087.001
+ประกอบด้วย Alert และ 16 Events (EID 1 จำนวน 3 Events ได้แก่ \texttt{cmd.exe} $\rightarrow$ \texttt{net users}
+$\rightarrow$ \texttt{net1 users} และที่เหลือเป็น EID 10) ในรูปแบบ JSON
+เงื่อนไขการทดลองแสดงในตารางที่~\ref{tab:rag-conditions}
+
+\begin{table}[ht]
+  \centering
+  \caption{เงื่อนไขการทดลองความจำเป็นของ RAG}
+  \label{tab:rag-conditions}
+  \begin{tabular}{|L{0.25\textwidth}|c|L{0.52\textwidth}|}
+    \hline
+    \textbf{การทดลอง} & \textbf{RAG} & \textbf{คำอธิบาย} \\ \hline
+    1. Direct-Log      & ไม่ใช้ & ส่ง Representation Log ให้ LLM โดยตรง \\ \hline
+    2. Direct-Summary  & ไม่ใช้ & ให้ LLM แปลง Log เป็นคำอธิบายพฤติกรรมภาษาคนก่อน แล้วจึงให้ระบุเทคนิค \\ \hline
+    3.1 RAG-Log ($k=10$) & ใช้ & ใช้ Representation Log เป็น Query ค้นหา RAG ได้ Top-10 ให้ LLM \\ \hline
+    3.2 RAG-Log ($k=5$)  & ใช้ & ใช้ Representation Log เป็น Query ค้นหา RAG ได้ Top-5 ให้ LLM \\ \hline
+    4. RAG-Summary     & ใช้ & ใช้คำอธิบายพฤติกรรมภาษาคน (จากการทดลองที่ 2) เป็น Query ค้นหา RAG ได้ Top-$k$ ให้ LLM \\ \hline
+  \end{tabular}
+\end{table}
+
+\subsection{ผลการทดลอง}
+ผลการทดลองทั้ง 5 เงื่อนไข ได้แก่ อันดับของเฉลยในผลลัพธ์ของ RAG และคำตอบของ LLM แสดงในตารางที่~\ref{tab:rag-results}
+
+\begin{table}[ht]
+  \centering
+  \caption{ผลการทดลองความจำเป็นของ RAG (คำตอบที่ถูกต้องคือ T1087.001)}
+  \label{tab:rag-results}
+  \small
+  \begin{tabular}{|l|c|l|c|}
+    \hline
+    \textbf{การทดลอง} & \textbf{อันดับเฉลยใน RAG} & \textbf{คำตอบของ LLM} & \textbf{ผล} \\ \hline
+    1. Direct-Log        & --                & T1083 File and Directory Discovery & ผิด \\ \hline
+    2. Direct-Summary    & --                & T1078 Valid Accounts                & ผิด \\ \hline
+    3.1 RAG-Log ($k=10$) & อันดับ 6          & T1087.001                           & ถูก \\ \hline
+    3.2 RAG-Log ($k=5$)  & ไม่อยู่ใน Top-5   & T1033 System Owner/User Discovery   & ผิด \\ \hline
+    4. RAG-Summary       & อันดับ 1          & T1087.001                           & ถูก \\ \hline
+  \end{tabular}
+\end{table}
+
+\subsection{การวิเคราะห์ผล}
+จากตารางที่~\ref{tab:rag-results} พบว่า
+\begin{enumerate}
+  \item เมื่อไม่ใช้ RAG (การทดลองที่ 1 และ 2) LLM ขนาดเล็กตอบผิดทั้งสองกรณี
+        แม้ Input จะผ่านการคัดเลือก Event มาแล้ว แสดงว่าโมเดลขนาด 9B ยังขาดความรู้เฉพาะด้าน ATT\&CK
+        ที่จะแยกแยะเทคนิคที่ใกล้เคียงกันได้
+  \item LLM ตอบถูกเฉพาะเมื่อมี T1087.001 ซึ่งเป็นเฉลยอยู่ใน Top-$k$ ที่ได้จาก RAG
+        ดังนั้นคุณภาพของ Retrieval เป็นปัจจัยสำคัญต่อความแม่นยำ
+  \item การใช้คำอธิบายพฤติกรรมภาษาคนเป็น Query (RAG-Summary) ทำให้เฉลยขึ้นมาอยู่อันดับ 1
+        ดีกว่าการใช้ JSON โดยตรง (อันดับ 6) เนื่องจากคำอธิบายภาษาคนมีความหมายใกล้เคียงกับคำอธิบายเทคนิคในฐานความรู้มากกว่า
+  \item ค่า $k$ มีผลโดยตรง หาก $k$ น้อยเกินไปเฉลยอาจหลุดจาก Top-$k$ (การทดลอง 3.2)
+\end{enumerate}
+
+\subsection{ข้อจำกัดของการทดลอง}
+การทดลองนี้ใช้เพียง 1 เทคนิคและ 1 กรณี และคำสั่ง \texttt{net users} เป็นคำสั่งที่มีลักษณะชัดเจน
+จึงยังไม่สามารถสรุปผลโดยทั่วไปได้ จำเป็นต้องทดสอบกับชุดข้อมูลที่ครอบคลุมหลายเทคนิคเพิ่มเติม
+และกำหนดเกณฑ์การประเมินไว้ล่วงหน้าก่อนดูผล
+
+\section{แผนการทดลองและการประเมินผลในขั้นต่อไป}
+
+\subsection{ชุดข้อมูล}
+\begin{itemize}
+  \item \textbf{Development Set} -- Splunk Attack Data กลุ่มที่มีร่องรอยการจำลองการโจมตีชัดเจน
+        ใช้สำหรับออกแบบและปรับพารามิเตอร์ของ Pipeline
+  \item \textbf{Test Set} -- OTRF Security-Datasets (ใช้ Adversary View เป็นข้อมูลอ้างอิง)
+        และชุดข้อมูล Splunk ที่แยกไว้ไม่ใช้ระหว่างพัฒนา (Holdout)
+\end{itemize}
+
+\subsection{ตัวแปรในการทดลอง}
+\begin{itemize}
+  \item \textbf{Baseline} -- ส่ง Raw Logs (ภายใต้ขนาด Context เดียวกัน) ให้ LLM
+  \item \textbf{Event Selection} -- เปรียบเทียบ 5 วิธี (Alert Only, Single Event, Time Window, Multiple Related, Top-$k$)
+  \item \textbf{Representation} -- เปรียบเทียบ JSON, XML, TOON, Key=Value และ Timeline
+  \item \textbf{RAG} -- ไม่ใช้ / ใช้ Query แบบ Log / ใช้ Query แบบ Summary และค่า $k$ ต่าง ๆ
+\end{itemize}
+โดยกำหนดให้ใช้ LLM ตัวเดียว (Qwen3.5:9B) และการตั้งค่าเดิมตลอดการทดลอง
+
+\subsection{ตัวชี้วัด}
+\begin{itemize}
+  \item \textbf{Accuracy} -- ร้อยละของกรณีที่ระบุเทคนิคตรงกับ Ground Truth
+        (แยกพิจารณาระดับ Sub-technique และระดับ Technique)
+  \item \textbf{Precision / Recall / Macro F1} -- ความแม่นและความครอบคลุมรายเทคนิค
+  \item \textbf{Retrieval Rank} -- อันดับของเฉลยในผลลัพธ์ของ RAG และการอยู่ใน Top-$k$
+  \item \textbf{Latency} -- เวลาตั้งแต่รับ Logs จนได้คำตอบ (End-to-end)
+  \item \textbf{Token Cost} -- จำนวน Token ที่ส่งให้ LLM ก่อนและหลังผ่าน Pipeline
+\end{itemize}
