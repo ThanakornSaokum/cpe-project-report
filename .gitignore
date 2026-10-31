@@ -19,3 +19,5 @@
 *.synctex(busy)
 __latexindent*
 sampleReport.pdf
+_backup_before_claude/
+myReport.pdf
