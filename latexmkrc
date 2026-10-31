@@ -1,3 +1,6 @@
+# Use XeLaTeX (required by fontspec/thaixelatex.sty)
+$pdf_mode = 5;
+
 $makeindex=q/makeindex -s cind.ist %O -o %D %S/;
 $clean_ext=q/glo gls %R.ist/;
 
