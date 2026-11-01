@@ -1,0 +1,209 @@
+\chapter{\ifenglish Background Knowledge and Theory\else ทฤษฎีที่เกี่ยวข้อง\fi}
+
+เนื้อหาในบทนี้อธิบายแนวคิดและเทคโนโลยีที่เกี่ยวข้องกับโครงงาน
+ได้แก่ ระบบ SIEM แหล่งข้อมูล Logs มาตรฐานการจัดรูปแบบข้อมูล กรอบความรู้ MITRE ATT\&CK
+โมเดลภาษาขนาดใหญ่ เทคนิค RAG และตัวชี้วัดที่ใช้ประเมินผล
+เพื่อเป็นพื้นฐานสำหรับการทำความเข้าใจการออกแบบในบทถัดไป
+
+\section{Security Information and Event Management (SIEM)}
+
+SIEM คือระบบที่รวบรวม Logs และเหตุการณ์ด้านความปลอดภัย (Security Events)
+จากแหล่งต่าง ๆ ภายในองค์กร เช่น เครื่องลูกข่าย เซิร์ฟเวอร์ ไฟร์วอลล์ และแอปพลิเคชัน
+มาจัดเก็บไว้ในที่เดียว เพื่อให้สามารถค้นหา เชื่อมโยง (Correlate) และสร้างการแจ้งเตือน (Alert)
+เมื่อพบพฤติกรรมที่ตรงกับกฎการตรวจจับ (Detection Rule)
+SIEM จึงเป็นเครื่องมือหลักของศูนย์ปฏิบัติการด้านความปลอดภัย (Security Operations Center: SOC)
+
+ในโครงงานนี้ใช้ \textbf{Splunk Enterprise} เป็นระบบ SIEM
+โดย Logs ถูกจัดเก็บเป็นดัชนี (Index) และสามารถเรียกค้นได้ด้วยภาษา Search Processing Language (SPL)
+หรือผ่าน REST API ซึ่ง Pipeline ของโครงงานใช้สำหรับดึง Logs ที่เกี่ยวข้องกับ Alert
+
+\subsection{SOC Analyst}
+SOC Analyst คือเจ้าหน้าที่ด้านความปลอดภัยไซเบอร์ที่ทำหน้าที่เฝ้าระวัง ตรวจสอบ คัดกรอง
+และวิเคราะห์เหตุการณ์ด้านความปลอดภัย เพื่อระบุภัยคุกคามและสนับสนุนการตอบสนองต่อเหตุการณ์ (Incident Response)
+ซึ่งเป็นผู้มีส่วนได้ส่วนเสีย (Stakeholder) หลักของโครงงานนี้
+
+\section{แหล่งข้อมูล Security Logs}
+
+\subsection{Windows Sysmon}
+System Monitor (Sysmon)~\cite{sysmon} เป็นบริการของ Microsoft Sysinternals
+ที่บันทึกกิจกรรมของระบบปฏิบัติการ Windows อย่างละเอียดลงใน Windows Event Log
+โดยแต่ละประเภทกิจกรรมมีหมายเลข Event ID เฉพาะ ตัวอย่าง Event ID ที่สำคัญต่อโครงงานแสดงในตารางที่~\ref{tab:sysmon-eid}
+Events ที่เกี่ยวข้องกับ Process จะมีตัวระบุ \texttt{ProcessGuid} ที่ไม่ซ้ำกัน
+และ Event ID 1 จะบันทึก \texttt{ParentProcessGuid} ไว้ด้วย
+จึงสามารถนำมาสร้างความสัมพันธ์แบบ Parent--Child ระหว่าง Process ได้
+
+\begin{table}[ht]
+  \centering
+  \caption{ตัวอย่าง Sysmon Event ID ที่ใช้ในโครงงาน}
+  \label{tab:sysmon-eid}
+  \begin{tabular}{|c|l|l|}
+    \hline
+    \textbf{Event ID} & \textbf{ชื่อเหตุการณ์} & \textbf{ข้อมูลสำคัญ} \\ \hline
+    1  & Process Creation        & Image, CommandLine, ParentImage, User \\ \hline
+    3  & Network Connection      & SourceIp, DestinationIp, DestinationPort \\ \hline
+    10 & Process Access          & SourceImage, TargetImage, GrantedAccess \\ \hline
+    11 & File Create             & Image, TargetFilename \\ \hline
+    23 & File Delete (archived)  & Image, TargetFilename \\ \hline
+  \end{tabular}
+\end{table}
+
+\subsection{Linux Auditd}
+Linux Audit Daemon (auditd)~\cite{auditd} เป็นระบบบันทึกเหตุการณ์ของ Linux Kernel
+เช่น การเรียกใช้ System Call การรันคำสั่ง และการเข้าถึงไฟล์
+โดยหนึ่งเหตุการณ์อาจประกอบด้วยหลาย Record (เช่น \texttt{SYSCALL}, \texttt{EXECVE}, \texttt{PATH})
+ที่เชื่อมกันด้วยหมายเลข Event เดียวกัน
+ในโครงงานนี้ Auditd อยู่ในขอบเขตการออกแบบ ส่วนการทดลองใช้ Windows Sysmon
+
+\section{Common Information Model (CIM)}
+เนื่องจาก Logs จากแต่ละแหล่งมีรูปแบบและชื่อ Field แตกต่างกัน
+(เช่น Sysmon เป็น XML ส่วน Auditd เป็นข้อความแบบ Key=Value)
+Splunk จึงกำหนด Common Information Model (CIM)~\cite{splunk-cim}
+ซึ่งเป็นมาตรฐานชื่อ Field และโครงสร้างข้อมูลร่วม เช่น \texttt{process}, \texttt{parent\_process}, \texttt{user}, \texttt{dest}
+% การ Normalize Logs ให้อยู่ในรูปแบบร่วมทำให้ขั้นตอนถัดไปของ Pipeline ทำงานได้กับ Logs หลายแหล่งโดยไม่ต้องเขียนตรรกะแยก
+โครงงานนำแนวคิดของ CIM มาใช้ในการกำหนดโครงสร้าง Field กลางของโครงงาน เพื่อให้ขั้นตอนถัดไปของ Pipeline ทำงานกับ Logs หลายแหล่งได้ด้วยตรรกะเดียวกัน
+
+\section{MITRE ATT\&CK}
+MITRE ATT\&CK~\cite{mitre-attack,strom2018attack} เป็นฐานความรู้ระดับสากลที่รวบรวมพฤติกรรมของผู้โจมตีไซเบอร์จากเหตุการณ์จริง
+โดยจำแนกเป็น \textbf{Tactic} (เป้าหมายของการโจมตี เช่น Discovery, Credential Access)
+\textbf{Technique} (วิธีการที่ใช้เพื่อบรรลุเป้าหมาย) และ \textbf{Sub-technique} (รายละเอียดเฉพาะของวิธีการ)
+แต่ละเทคนิคมีรหัสประจำ เช่น T1087 Account Discovery และ T1087.001 Account Discovery: Local Account~\cite{mitre-t1087-001}
+ซึ่งผู้โจมตีพยายามดึงรายชื่อบัญชีผู้ใช้ภายในเครื่อง เช่น ใช้คำสั่ง \texttt{net user} หรือ \texttt{net localgroup}
+
+ATT\&CK Enterprise เวอร์ชัน 19.2 ที่ใช้ในโครงงานประกอบด้วย 15 Tactics, 222 Techniques
+และ 475 Sub-techniques (ไม่นับรายการที่ถูกยกเลิก) และมีการปรับปรุงเวอร์ชันประมาณปีละ 2 ครั้ง
+ในโครงงานนี้ ATT\&CK ถูกใช้ใน 2 บทบาท คือ (1) เป็นป้ายกำกับ (Label) ของ Ground Truth สำหรับประเมินผล
+และ (2) เป็นฐานความรู้ (Knowledge Base) ให้ LLM อ้างอิงผ่าน RAG
+
+\section{ชุดข้อมูลและแนวคิด Scenario Dataset}
+
+\subsection{OTRF Security-Datasets}
+OTRF Security-Datasets~\cite{otrf-security-datasets} เป็นชุดข้อมูลสาธารณะที่บันทึก Logs จากการจำลองการโจมตี
+โดยมีคำอธิบายมุมมองผู้โจมตี (Adversary View) ระบุคำสั่งและการกระทำของผู้โจมตีอย่างละเอียด
+% จึงเหมาะสำหรับใช้เป็น Benchmark ในการออกแบบและวัดผล Pipeline
+จึงใช้เป็นชุดข้อมูลสำหรับทดสอบ (Test Set) ซึ่งประเมินผลเพียงครั้งเดียวหลังกำหนดค่าพารามิเตอร์แล้ว
+
+\subsection{Splunk Attack Data}
+Splunk Attack Data~\cite{splunk-attack-data} เป็นคลังชุดข้อมูลที่จัดตามรหัสเทคนิค ATT\&CK
+แต่ละไฟล์ระบุว่าเป็นเทคนิคใด แต่ไม่ได้ระบุว่า Event ใดเป็นส่วนของการโจมตี
+% โครงงานจึงใช้ชุดข้อมูลนี้เป็น Validation โดย Replay Logs เข้า Splunk Enterprise เพื่อทดสอบในสภาพใกล้เคียงการใช้งานจริง
+โครงงานจึงใช้ชุดข้อมูลนี้เป็นชุดข้อมูลสำหรับพัฒนา (Development Set) โดยระบุ Event สำคัญเพิ่มเติม (Event-level Annotation) เพื่อใช้ปรับพารามิเตอร์ของ Pipeline และ Replay Logs เข้า Splunk Enterprise เพื่อทดสอบในสภาพใกล้เคียงการใช้งานจริง
+
+\subsection{นิยามที่ใช้ในโครงงาน}
+\begin{itemize}
+  \item \textbf{Attack Scenario} -- การจำลองการโจมตีหนึ่งสถานการณ์ในสภาพแวดล้อมการทดลอง
+  \item \textbf{Scenario Dataset} -- ชุดของ Events ที่เกิดขึ้นในบริบทของ Attack Scenario หนึ่ง
+  \item \textbf{Event / Log Event} -- บันทึกหนึ่ง Record ของกิจกรรม เช่น Process Creation หรือ Network Connection
+  \item \textbf{Ground Truth} -- เทคนิค ATT\&CK ที่ใช้สร้าง Scenario นั้น
+        เป็น Ground Truth ระดับ Scenario/Dataset ไม่ใช่ Label ของทุก Event
+        (1 Scenario Dataset $\rightarrow$ 1 Ground-truth Technique $\rightarrow$ หลาย Events)
+  \item \textbf{Noise} -- เหตุการณ์ใน Logs ที่ไม่เกี่ยวข้องกับการวิเคราะห์ รวมถึง Field และ Event ที่ไม่จำเป็น
+  \item \textbf{Investigation Context} -- ชุดเหตุการณ์และความรู้ที่เกี่ยวข้องกับเหตุการณ์ที่น่าสงสัย
+        ซึ่งถูกจัดเตรียมเพื่อให้ LLM ใช้เหตุผลกับเหตุการณ์นั้น
+\end{itemize}
+
+\section{Large Language Model (LLM)}
+LLM คือโมเดลภาษาที่สร้างจากสถาปัตยกรรม Transformer~\cite{vaswani2017attention}
+และฝึกด้วยข้อความจำนวนมหาศาล ทำให้สามารถเข้าใจและสร้างข้อความ รวมถึงใช้เหตุผลกับข้อมูลที่ได้รับได้
+LLM ประมวลผลข้อความในหน่วย \textbf{Token} และรับข้อมูลได้จำกัดตามขนาด \textbf{Context Window}
+ต้นทุนและเวลาในการประมวลผลจึงแปรผันตามจำนวน Token ที่ส่งเข้าไป
+นอกจากนี้ งานวิจัยพบว่าเมื่อ Context ยาวขึ้น LLM มีแนวโน้มใช้ข้อมูลที่อยู่ช่วงกลางของ Context ได้ไม่ดี~\cite{liu2024lost}
+การคัดเลือกและจัดระเบียบข้อมูลก่อนส่งให้ LLM จึงช่วยลด Noise และทำให้กลไก Attention ของโมเดลโฟกัสข้อมูลที่สำคัญได้ดีขึ้น
+
+\subsection{Local LLM: Qwen3.5 และ Ollama}
+โครงงานเลือกใช้ LLM ขนาดเล็กที่ทำงานภายในเครื่อง ได้แก่ Qwen3.5 ขนาด 9B พารามิเตอร์
+ซึ่งเป็นโมเดลในตระกูล Qwen~\cite{qwen3} ที่เผยแพร่แบบ Open-weight
+และรันผ่าน Ollama~\cite{ollama} ที่ให้บริการโมเดลผ่าน API ภายในเครื่อง
+ข้อดีของ Local LLM คือ Logs ขององค์กรไม่ต้องถูกส่งออกไปภายนอก และไม่มีค่าบริการ API ตามจำนวน Token
+แต่โดยทั่วไปมีความสามารถจำกัดกว่าโมเดลเชิงพาณิชย์ขนาดใหญ่
+เป้าหมายของโครงงานจึงเป็นการแสดงว่า Context ที่ดีช่วยให้โมเดลขนาดเล็กตอบได้ถูกต้อง
+
+\section{Retrieval-Augmented Generation (RAG)}
+RAG~\cite{lewis2020rag} คือเทคนิคที่เสริมความรู้ให้ LLM ขณะตอบคำถาม
+โดยแบ่งเอกสารความรู้เป็นส่วนย่อย (Chunk) แล้วแปลงแต่ละ Chunk เป็นเวกเตอร์ด้วย Embedding Model
+เก็บไว้ในฐานข้อมูลเวกเตอร์ (Vector Database)
+เมื่อมีคำถาม (Query) ระบบจะแปลง Query เป็นเวกเตอร์และค้นหา Chunk ที่มีความคล้ายสูงสุด $k$ อันดับ (Top-$k$)
+ด้วยการวัดความคล้ายแบบ Cosine Similarity ดังสมการ~\eqref{eq:cosine}
+แล้วนำ Chunk เหล่านั้นใส่ใน Prompt เป็น Context ให้ LLM
+
+\begin{equation}\label{eq:cosine}
+\mathrm{sim}(\mathbf{q},\mathbf{d}) = \frac{\mathbf{q}\cdot\mathbf{d}}{\lVert\mathbf{q}\rVert\,\lVert\mathbf{d}\rVert}
+\end{equation}
+
+\noindent
+โดยที่ $\mathbf{q}$ คือเวกเตอร์ของ Query และ $\mathbf{d}$ คือเวกเตอร์ของ Chunk ในฐานความรู้
+
+\section{รูปแบบการนำเสนอข้อมูล (Data Representation)}
+ข้อมูลชุดเดียวกันสามารถเขียนได้หลายรูปแบบ ซึ่งส่งผลต่อจำนวน Token และความเข้าใจของ LLM
+รูปแบบที่โครงงานพิจารณา ได้แก่
+\textbf{XML} (รูปแบบต้นฉบับของ Sysmon มีแท็กซ้ำซ้อนจำนวนมาก),
+\textbf{JSON} (โครงสร้างชัดเจนและเป็น Output ของขั้นตอน Normalize),
+\textbf{TOON} (Token-Oriented Object Notation~\cite{toon-format} ที่ตัดเครื่องหมาย \{\}, "" ออกเพื่อลด Token),
+\textbf{Key=Value} (รูปแบบที่ Splunk ใช้แสดงผล) และ
+\textbf{Timeline} (สรุปเหตุการณ์เป็นบรรทัดเดียวต่อ Event ใช้ Token น้อยที่สุดแต่ข้อมูลบางส่วนหายไป)
+นอกจากนี้ยังมีรูปแบบ \textbf{Summary} ซึ่งให้ LLM แปลง Logs เป็นคำอธิบายพฤติกรรมภาษาธรรมชาติก่อน โดยไม่ระบุชื่อหรือรหัสเทคนิค เพื่อใช้เป็น Input หรือ Query สำหรับค้นหาในฐานความรู้
+
+% \section{ความสัมพันธ์เชิงกราฟของ Process}
+% ความสัมพันธ์ระหว่าง Process สามารถแทนด้วยกราฟมีทิศทาง $G=(V,E)$
+% โดยแต่ละโหนด $v \in V$ คือ Process (ระบุด้วย ProcessGuid)
+% และเส้นเชื่อม $e \in E$ แทนความสัมพันธ์ เช่น Parent สร้าง Child (Sysmon EID 1)
+% หรือ Process หนึ่งเข้าถึงอีก Process (EID 10)
+% การท่องกราฟ (Graph Traversal) แบบ Breadth-First Search ที่จำกัดจำนวนขั้น (Hop)
+% ทำให้สามารถรวบรวม Events ที่เชื่อมโยงกับ Alert ได้โดยไม่ลามไปทั้งระบบ
+
+\section{ความสัมพันธ์เชิงกราฟของ Process}
+ความสัมพันธ์ระหว่าง Process สามารถแทนด้วยกราฟมีทิศทาง $G=(V,E)$
+โดยแต่ละโหนด $v \in V$ คือ Process (ระบุด้วย ProcessGuid)
+และเส้นเชื่อม $e \in E$ แทนความสัมพันธ์เชิงสาเหตุ ได้แก่
+Parent สร้าง Child (Sysmon EID 1) และ Process หนึ่งสร้างไฟล์ที่ถูกรันเป็นอีก Process (EID 11 ตามด้วย EID 1)
+ส่วน Process Access (EID 10) ใช้เป็นหลักฐานประกอบของโหนดที่เกี่ยวข้อง แต่ไม่ใช้เป็นเส้นทางในการท่องกราฟ
+การท่องกราฟโดยหาเส้นทางสั้นที่สุด (Shortest Path) จากจุดที่ Alert ชี้และจำกัดระยะทางสูงสุด
+ทำให้สามารถรวบรวม Events ที่เชื่อมโยงกับ Alert ได้โดยไม่ลามไปทั้งระบบ
+
+\section{ตัวชี้วัดที่ใช้ประเมินผล}
+\begin{itemize}
+  \item \textbf{Accuracy} -- สัดส่วนกรณีที่ระบบระบุเทคนิคตรงกับ Ground Truth
+        \begin{equation}
+        \mathrm{Accuracy} = \frac{\text{จำนวนกรณีที่ตอบถูก}}{\text{จำนวนกรณีทั้งหมด}}
+        \end{equation}
+  \item \textbf{Precision, Recall และ Macro F1} -- วัดความแม่นและความครอบคลุมรายเทคนิค
+        แล้วเฉลี่ยทุกเทคนิคอย่างเท่ากัน
+        \begin{equation}
+        P_t = \frac{TP_t}{TP_t+FP_t},\quad
+        R_t = \frac{TP_t}{TP_t+FN_t},\quad
+        \text{Macro-}F_1 = \frac{1}{|T|}\sum_{t\in T}\frac{2P_tR_t}{P_t+R_t}
+        \end{equation}
+  \item \textbf{Latency} -- เวลาตั้งแต่รับ Logs จนได้คำตอบ (End-to-end)
+  \item \textbf{Token Cost} -- จำนวน Token ที่ส่งให้ LLM เปรียบเทียบก่อนและหลังผ่าน Pipeline
+\end{itemize}
+
+\section{\ifenglish%
+\ifcpe CPE \else ISNE \fi knowledge used, applied, or integrated in this project
+\else%
+ความรู้ตามหลักสูตรซึ่งถูกนำมาใช้หรือบูรณาการในโครงงาน
+\fi
+}
+\begin{itemize}
+  \item \textbf{ความมั่นคงปลอดภัยของระบบคอมพิวเตอร์และเครือข่าย} -- ความเข้าใจพฤติกรรมการโจมตี
+        Logs ด้านความปลอดภัย และกระบวนการสืบสวนเหตุการณ์
+  \item \textbf{ระบบปฏิบัติการ} -- กลไกการสร้างและความสัมพันธ์ระหว่าง Process บน Windows และ Linux
+  \item \textbf{โครงสร้างข้อมูลและอัลกอริทึม} -- การสร้างกราฟ การท่องกราฟด้วยการหาเส้นทางสั้นที่สุด (Dijkstra)
+        และการจัดลำดับด้วยคะแนนภายใต้งบประมาณ Token
+  \item \textbf{ฐานข้อมูลและการจัดการข้อมูล} -- การ Parse, Normalize และจัดเก็บข้อมูลหลายรูปแบบ
+  \item \textbf{วิศวกรรมซอฟต์แวร์} -- การออกแบบสถาปัตยกรรมระบบ การแบ่งโมดูล และการพัฒนา Web Application
+  \item \textbf{ปัญญาประดิษฐ์/การเรียนรู้ของเครื่อง} -- การประเมินผลด้วย Accuracy, Precision, Recall, F1
+        และการแยกข้อมูลสำหรับพัฒนากับข้อมูลสำหรับทดสอบ
+\end{itemize}
+
+\section{\ifenglish%
+Extracurricular knowledge used, applied, or integrated in this project
+\else%
+ความรู้นอกหลักสูตรซึ่งถูกนำมาใช้หรือบูรณาการในโครงงาน
+\fi
+}
+\begin{itemize}
+  \item การติดตั้งและใช้งาน Splunk Enterprise รวมถึง SPL และ REST API
+  \item รูปแบบ Logs ของ Windows Sysmon และ Linux Auditd และมาตรฐาน CIM
+  \item กรอบความรู้ MITRE ATT\&CK และรูปแบบข้อมูล STIX
+  \item การใช้งาน LLM ภายในเครื่องผ่าน Ollama, Prompt Engineering และ Structured Output
+  \item การสร้างระบบ RAG ด้วย Embedding Model และ Vector Search
+\end{itemize}

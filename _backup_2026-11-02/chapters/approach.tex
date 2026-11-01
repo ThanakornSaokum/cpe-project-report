@@ -1,0 +1,334 @@
+\chapter{\ifproject%
+\ifenglish Project Structure and Methodology\else โครงสร้างและขั้นตอนการทำงาน\fi
+\else%
+\ifenglish Project Structure\else โครงสร้างของโครงงาน\fi
+\fi
+}
+
+ในบทนี้จะกล่าวถึงภาพรวมของระบบ หลักการ และการออกแบบแต่ละขั้นตอนของ Context Construction Pipeline
+ตั้งแต่การรับ Alert และ Raw Logs จาก SIEM จนถึงการสร้างรายงานการสืบสวน
+โดยใช้ชุดข้อมูล Account Discovery: Local Account (T1087.001) จาก Splunk Attack Data เป็นตัวอย่างประกอบ
+
+\section{ภาพรวมของระบบ}
+
+ภาพรวมของระบบแสดงดังรูปที่~\ref{fig:overview} แบ่งเป็น 4 ส่วน ได้แก่
+\textbf{Input} (Alert และ Raw Logs),
+\textbf{Context Construction Pipeline} (Normalize, Event Selection, Representation),
+\textbf{Analysis} (RAG และ LLM Analysis) และ \textbf{Output} (Investigation Report)
+
+\begin{figure}[ht]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+  node distance=6mm and 7mm,
+  box/.style={draw, rounded corners=2pt, fill=white, align=center,
+              minimum width=23mm, minimum height=13mm, font=\small},
+  arr/.style={-{Latex[length=2.5mm]}, very thick, blue!50!black},
+  grp/.style={draw, dashed, rounded corners=8pt, gray, inner sep=3mm}]
+  \node[box] (alert) {Alert/EDR\\[-1pt]{\scriptsize ตรวจพบความผิดปกติ}};
+  \node[box, below=of alert] (raw) {Raw Log\\[-1pt]{\scriptsize นำ Log จาก SIEM}};
+  \node[box, right=12mm of raw] (norm) {Normalize\\[-1pt]{\scriptsize CIM standard}};
+  \node[box, right=of norm] (sel) {Event Selection\\[-1pt]{\scriptsize คัด Event สำคัญ}};
+  \node[box, right=of sel] (rep) {Representation\\[-1pt]{\scriptsize JSON / TOON}};
+  \node[box, right=12mm of rep] (llm) {LLM Analysis\\[-1pt]{\scriptsize ระบุ Technique}};
+  \node[box, above=of llm] (rag) {RAG\\[-1pt]{\scriptsize ดึง Top-$k$ MITRE}};
+  \node[box, right=12mm of llm] (out) {Output\\[-1pt]{\scriptsize Report}};
+  \draw[arr] (alert) -- (raw);
+  \draw[arr] (raw) -- (norm);
+  \draw[arr] (norm) -- (sel);
+  \draw[arr] (sel) -- (rep);
+  \draw[arr] (rep) -- (llm);
+  \draw[arr] (rep.east) ++(4mm,0) |- (rag.west);
+  \draw[arr] (rag) -- (llm);
+  \draw[arr] (llm) -- (out);
+  \begin{scope}[on background layer]
+    \node[grp, fit=(alert)(raw), label={[gray]above:Input}] {};
+    \node[grp, fit=(norm)(sel)(rep), label={[gray]above:Context Construction Pipeline}] {};
+    \node[grp, fit=(rag)(llm), label={[gray]above:Analysis}] {};
+    \node[grp, fit=(out), label={[gray]above:Output}] {};
+  \end{scope}
+\end{tikzpicture}}
+\caption{ภาพรวมของระบบและ Context Construction Pipeline}
+\label{fig:overview}
+\end{figure}
+
+หลักการสำคัญของระบบคือ \textbf{ระบบไม่ได้ทำหน้าที่ตรวจจับภัยคุกคามแทน SIEM/EDR}
+Alert ที่ระบบเดิมตรวจพบเป็นเพียงจุดเริ่มต้นการสืบสวน (Input ที่รับเข้ามา)
+หน้าที่ของ Pipeline คือขยายข้อมูลรอบจุดเริ่มต้นนั้นให้เป็น Investigation Context
+ที่ LLM สามารถวิเคราะห์ได้อย่างมีหลักฐาน
+การจัดระเบียบข้อมูลก่อนส่งให้ LLM ช่วยลด Noise และทำให้ LLM โฟกัสข้อมูลที่สำคัญได้ดีกว่าการส่ง Raw Logs โดยตรง
+Input และ Output ของแต่ละขั้นตอนสรุปได้ดังตารางที่~\ref{tab:pipeline-io}
+
+\begin{table}[ht]
+  \centering
+  \caption{Input และ Output ของแต่ละขั้นตอนใน Pipeline}
+  \label{tab:pipeline-io}
+  \begin{tabular}{|l|l|l|}
+    \hline
+    \textbf{ขั้นตอน} & \textbf{Input} & \textbf{Output} \\ \hline
+    Raw Log        & Alert และคำค้นไปยัง SIEM            & Raw Logs (XML/JSON) \\ \hline
+    Normalize      & Windows/Linux Raw Logs               & JSON ตามโครงสร้าง Field ร่วม (CIM) \\ \hline
+    Event Selection & JSON Logs + Alert                   & Selected JSON Logs \\ \hline
+    Representation & Selected JSON Logs                   & Representation Log \\ \hline
+    RAG            & Query จาก Representation Log         & Top-$k$ Techniques (Context) \\ \hline
+    LLM Analysis   & Context + Representation Log         & Attack Technique พร้อมหลักฐาน \\ \hline
+    Output         & ผลการวิเคราะห์ของ LLM                 & Investigation Report \\ \hline
+  \end{tabular}
+\end{table}
+
+\section{ขั้นตอนที่ 1: การรับ Alert และ Raw Logs จาก SIEM}
+
+Logs จากชุดข้อมูลถูก Replay เข้า Splunk Enterprise เพื่อจำลองสภาพแวดล้อม SIEM จริง
+เมื่อมี Alert เกิดขึ้น (หรือในการทดลองใช้ Case Configuration จำลอง Alert)
+Pipeline จะดึง Logs ที่เกี่ยวข้องจาก Splunk ผ่าน REST API และบันทึกเป็นไฟล์ JSON Lines
+สำหรับชุดข้อมูลตัวอย่าง T1087.001 ซึ่งเป็น Windows Sysmon Logs ใน Splunk
+มีจำนวน 11,090 events ในช่วงเวลาประมาณ 15 นาที (ขนาดไฟล์ XML ประมาณ 16.826 MB)
+
+\section{ขั้นตอนที่ 2: Normalize}
+
+Raw Logs จากแต่ละแหล่งมีรูปแบบต่างกัน เช่น Sysmon ใน Splunk อยู่ในรูป \texttt{XmlWinEventLog}
+และ Auditd เป็นข้อความหลาย Record ต่อเหตุการณ์
+ขั้นตอน Normalize จะ Parse Logs แล้วแปลงเป็น JSON ที่มีโครงสร้าง Field ร่วม (Common Field Structure)
+ตามแนวทางของ Splunk CIM~\cite{splunk-cim} เช่น \texttt{EventID}, \texttt{SystemTime}, \texttt{RecordNumber},
+\texttt{Channel}, \texttt{Image}, \texttt{CommandLine}, \texttt{ProcessGuid}, \texttt{ParentProcessGuid} และ \texttt{User}
+ดังตัวอย่างในรูปที่~\ref{fig:normalize}
+ผลลัพธ์ทำให้ขั้นตอนถัดไปทำงานกับ Logs จากทั้ง Windows และ Linux ได้ด้วยตรรกะเดียวกัน
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=\textwidth]{normalize_example.png}
+  \caption{ตัวอย่าง Raw Logs (XML) และผลลัพธ์หลัง Normalize เป็น JSON}
+  \label{fig:normalize}
+\end{figure}
+
+\section{ขั้นตอนที่ 3: Event Selection}
+
+Event Selection ตอบคำถามว่า \emph{``จะส่งเหตุการณ์ใดให้ LLM''}
+ซึ่งเป็นขั้นตอนที่ยากที่สุดของ Pipeline เพราะต้องคัดเลือกให้ได้หลักฐานครบ แต่ไม่มี Noise มากเกินไป
+โครงงานเสนอวิธี Event Selection 5 วิธีเพื่อนำมาเปรียบเทียบ (รูปที่~\ref{fig:es-methods} และตารางที่~\ref{tab:es-methods})
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=\textwidth]{event_selection_methods.png}
+  \caption{แนวคิดของวิธี Event Selection แบบที่ 1--4 (แถบสีเขียวคือ Event ที่ถูกเลือก)}
+  \label{fig:es-methods}
+\end{figure}
+
+\begin{enumerate}
+  \item \textbf{Alert Only} -- ใช้เฉพาะข้อมูลจาก Alert
+  \item \textbf{Single Event} -- ดึงเฉพาะ Event เดียวที่ Alert ชี้
+  \item \textbf{Time Window} -- ดึง Events ในช่วงเวลา $\pm T$ รอบ Alert
+  \item \textbf{Multiple Related Events} -- ดึง Events ที่เชื่อมโยงกันจริงผ่านความสัมพันธ์ของ Process
+        (ProcessGuid Lineage) ได้แก่ Ancestor, Descendant และ Events อื่นที่ ProcessGuid เดียวกัน
+  \item \textbf{Top-$k$ Relevant Events} -- ให้คะแนนความเกี่ยวข้องกับทุก Event ในขอบเขตที่กำหนด
+        แล้วเลือกเฉพาะ Events ที่มีคะแนนสูงสุดภายใต้งบประมาณ Token
+\end{enumerate}
+
+\begin{table}[ht]
+  \centering
+  \caption{ข้อดีและข้อเสียของวิธี Event Selection แต่ละแบบ}
+  \label{tab:es-methods}
+  \begin{tabular}{|L{0.16\textwidth}|L{0.36\textwidth}|L{0.36\textwidth}|}
+    \hline
+    \textbf{วิธี} & \textbf{ข้อดี} & \textbf{ข้อเสีย} \\ \hline
+    Alert Only &
+      ประมวลผลเร็วที่สุด ไม่มี Overhead จากการ Query และใช้ได้แม้ไม่มี Raw Logs &
+      ขาดหลักฐานเชิงลึก ไม่สามารถทำ Evidence Grounding ได้ LLM ได้แต่เชื่อตาม Alert \\ \hline
+    Single Event &
+      ได้รายละเอียดเต็มของ Event (CommandLine, GUID) และแยกผลของ ``รายละเอียด 1 Event'' ได้ชัด &
+      ไม่เห็นว่า Event มาจากไหนหรือต่อไปทำอะไร พลาด Attack Chain ที่กระจายหลาย Event \\ \hline
+    Time Window &
+      Implement ง่าย (Range Query) ใช้ได้กับ Logs ทุกประเภท และจับ Events ที่เกิดพร้อมกันแต่ไม่เชื่อมกันทางโครงสร้างได้ &
+      Noise สูงถ้า $T$ กว้าง พลาด Event ถ้า $T$ แคบ และไม่มีค่า $T$ ที่ถูกต้องสากล \\ \hline
+    Multiple Related &
+      สร้าง Attack Chain ได้ และตัด Events ที่เกิดพร้อมกันโดยบังเอิญออก &
+      พึ่งพา Relationship Key สูง อาจพลาดพฤติกรรมที่ไม่เชื่อมทาง Process และเสี่ยง Over-traversal หากไม่จำกัดความลึก \\ \hline
+    Top-$k$ Relevant &
+      ควบคุมขนาด Context ได้ (Predictable Context Size) ยืดหยุ่น ปรับ $k$ ตามข้อจำกัด Token ได้ &
+      ต้องออกแบบ Scoring Model ให้เป็น Generic และอ่อนไหวต่อค่า $k$ \\ \hline
+  \end{tabular}
+\end{table}
+
+จากตัวอย่าง T1087.001 เมื่อกำหนดให้ Alert ชี้ที่ Process \texttt{net.exe} (คำสั่ง \texttt{net users})
+และใช้วิธี Multiple Related เพื่อดึง Process ที่เกี่ยวข้อง (ผู้ใช้ที่รัน, Parent และ Child Process)
+พร้อม Events ที่ Process เหล่านั้นเป็นเจ้าของ จำนวน Events ลดลงจาก 11,090 เหลือ 177 events
+วิธี Top-$k$ Relevant Events ซึ่งเป็นวิธีที่โครงงานนำเสนอ ต่อยอดจากแนวคิดนี้โดยแบ่งเป็น 4 ขั้นตอนย่อย ดังนี้
+
+\subsection{Graph: สร้างกราฟความสัมพันธ์ของ Process}
+สร้างกราฟความสัมพันธ์ระหว่าง Process และ Event โดยมีโหนดเป็น Process (ระบุด้วย ProcessGuid)
+และเส้นเชื่อม 3 ประเภท ได้แก่
+(1) Parent $\rightarrow$ Child จาก Sysmon EID 1 (Process Creation)
+(2) Process Access จาก EID 10 และ
+(3) File $\rightarrow$ Exec จาก EID 11 (ไฟล์ที่ถูกสร้างแล้วถูกรัน)
+
+\subsection{Traverse: ท่องกราฟจากจุดที่ Alert ชี้}
+เริ่มจาก Process ที่ Alert ชี้ (Anchor) แล้วขยายไปยัง Parent และ Child Process
+โดยเก็บเฉพาะบรรพบุรุษและลูกหลานโดยตรงที่อยู่ในระยะที่กำหนด
+เพื่อให้ได้ Candidate Events ที่เกี่ยวข้องกับ Alert โดยไม่ลามไปทั้งระบบ ตามกฎดังนี้
+\begin{enumerate}
+  \item เดินตามความสัมพันธ์ Parent $\rightarrow$ Child
+  \item เดินทางเดียว คือขึ้นตรงหรือลงตรง ไม่เลี้ยวเข้ากิ่งข้างเคียง
+  \item หยุดเมื่อครบจำนวน Hop สูงสุด หรือเจอ Boundary
+        (Process ที่รู้ว่ามีอยู่ แต่ไม่มี EID 1 หรือบันทึกการเกิดในไฟล์ Log)
+  \item ทุก Process ที่เดินถึง จะเก็บทุก Event ที่ Process นั้นเป็นเจ้าของ
+\end{enumerate}
+รูปที่~\ref{fig:traverse} แสดงส่วนหนึ่งของกราฟที่ได้จาก Sysmon Log ของ T1087.001
+โดยเส้นทึบสีดำคือความสัมพันธ์ Parent--Child (EID 1) และเส้นประสีแดงคือ Process Access (EID 10)
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.85\textwidth]{traverse_graph.png}
+  \caption{ส่วนหนึ่งของกราฟ Process จาก Sysmon Log ของ T1087.001 โดยมี \texttt{net.exe} เป็นจุดเริ่ม (Anchor)}
+  \label{fig:traverse}
+\end{figure}
+
+\subsection{Score: ให้คะแนนความเกี่ยวข้อง}
+ประเมินและจัดลำดับความเกี่ยวข้องของแต่ละ Candidate Event $e$ ด้วยผลคูณของ 3 ปัจจัย ดังสมการ~\eqref{eq:score}
+
+\begin{equation}\label{eq:score}
+\mathrm{Score}(e) = \mathrm{Prox}(e) \times \mathrm{Type}(e) \times \mathrm{Time}(e)
+\end{equation}
+\begin{align}
+\mathrm{Prox}(e) &= \gamma^{\,hop(e)} \\
+\mathrm{Type}(e) &= w[\mathrm{EventID}] \\
+\mathrm{Time}(e) &= e^{-|\Delta t|/\tau}
+\end{align}
+
+\noindent
+โดยที่ $hop(e)$ คือจำนวนขั้นบนกราฟจากจุดที่ Alert ชี้ถึง Process เจ้าของ Event,
+$\gamma$ คือสัดส่วนคะแนนที่เหลือเมื่อห่างออกไป 1 Hop,
+$w[\mathrm{EventID}]$ คือน้ำหนักของ Event แต่ละชนิด (0--1) ที่บอกว่า Event ชนิดนั้นช่วยการวิเคราะห์ได้มากเพียงใด,
+$\Delta t$ คือเวลาที่ห่างจาก Alert (วินาที) และ $\tau$ คือช่วงเวลาที่คะแนนลดลงเหลือประมาณ $1/e$ (ราว $1/3$)
+ค่าพารามิเตอร์ที่ใช้ในปัจจุบันแสดงในตารางที่~\ref{tab:score-param}
+ซึ่งยังเป็นค่าตั้งต้นที่ต้องปรับจูนในการทดลองขั้นต่อไป
+ตัวอย่างการคำนวณคะแนนแสดงในตารางที่~\ref{tab:score-example}
+
+\begin{table}[ht]
+  \centering
+  \caption{ค่าพารามิเตอร์ตั้งต้นของการให้คะแนน}
+  \label{tab:score-param}
+  \begin{tabular}{|c|c|l|}
+    \hline
+    \textbf{พารามิเตอร์} & \textbf{ค่า} & \textbf{ความหมาย} \\ \hline
+    $\gamma$ & 0.6 & Hop 0 = 1, Hop 1 = 0.6, Hop 2 = 0.36 \\ \hline
+    $w[\text{EID 1}]$ & 1.0 & Process Creation มีข้อมูลคำสั่งครบ \\ \hline
+    $w[\text{EID 10}]$ & 0.2 & Process Access ให้ข้อมูลประกอบ \\ \hline
+    $\tau$ & 300 วินาที & ห่าง 300 วินาที คะแนนเวลาเหลือ 0.37 \\ \hline
+  \end{tabular}
+\end{table}
+
+\begin{table}[ht]
+  \centering
+  \caption{ตัวอย่างการคำนวณคะแนนของ Candidate Events จาก T1087.001}
+  \label{tab:score-example}
+  \begin{tabular}{|l|c|c|c|c|c|c|}
+    \hline
+    \textbf{Event} & \textbf{Hop} & \textbf{$\Delta t$} & \textbf{Prox} & \textbf{Type} & \textbf{Time} & \textbf{Score} \\ \hline
+    net1.exe (EID 1)         & 1 & 0.01 s & 0.6 & 1.0 & 1.00 & 0.60 \\ \hline
+    cmd.exe (EID 1)          & 1 & 6.6 s  & 0.6 & 1.0 & 0.98 & 0.59 \\ \hline
+    net $\rightarrow$ net1 (EID 10) & 0 & 0 s & 1.0 & 0.2 & 1.00 & 0.20 \\ \hline
+    cmd $\rightarrow$ WMIC (EID 10) & 1 & 11 s & 0.6 & 0.2 & 0.97 & 0.12 \\ \hline
+    cmd $\rightarrow$ cmd (EID 10)  & 1 & 74 s & 0.6 & 0.2 & 0.78 & 0.09 \\ \hline
+  \end{tabular}
+\end{table}
+
+\subsection{Budget: คัดเลือกภายใต้งบประมาณ Token}
+เพื่อจำกัดจำนวน Token ให้พอดีกับ Context Window ของโมเดล และให้ LLM เห็นเฉพาะ Events ที่สำคัญที่สุดก่อน
+ขั้นตอน Budget ทำงาน 3 ข้อ ดังนี้
+\begin{enumerate}
+  \item ใส่ Event ที่ Alert ชี้ (Anchor) เป็นอันดับแรก
+  \item เรียง Events ที่เหลือตามคะแนนจากมากไปน้อย
+  \item ใส่ทีละ Event พร้อมนับจำนวน Token สะสม หากเกินโควตา $B$ ให้หยุด
+\end{enumerate}
+ตัวอย่างเช่น หากกำหนดโควตา $B = 400$ Tokens และแต่ละ Event ใช้ประมาณ 100--130 Tokens
+จะมีเพียงประมาณ 3 Events แรกเท่านั้นที่ถูกส่งต่อไปยังขั้นตอนถัดไป
+
+\section{ขั้นตอนที่ 4: Representation}
+
+Representation ตอบคำถามว่า \emph{``จะนำเสนอ Logs ที่คัดเลือกแล้วให้ LLM ในรูปแบบใดจึงเหมาะสมที่สุด''}
+เนื่องจากข้อมูลชุดเดียวกันเขียนต่างรูปแบบกันจะได้จำนวน Token และความเข้าใจของ LLM ที่ต่างกัน
+โครงงานเปรียบเทียบ 5 รูปแบบ (รูปที่~\ref{fig:representation} และตารางที่~\ref{tab:representation})
+โดยพิจารณาตามลำดับความสำคัญ คือ (1) Accuracy ในการระบุเทคนิค และ (2) Token Efficiency
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=\textwidth]{representation_formats.png}
+  \caption{ตัวอย่าง Event เดียวกันในรูปแบบ JSON, XML, TOON, Key=Value และ Timeline}
+  \label{fig:representation}
+\end{figure}
+
+\begin{table}[ht]
+  \centering
+  \caption{จำนวน Token โดยประมาณของ Event ตัวอย่าง (Sysmon EID 1) ในแต่ละรูปแบบ}
+  \label{tab:representation}
+  \begin{tabular}{|l|c|l|}
+    \hline
+    \textbf{รูปแบบ} & \textbf{Tokens (ประมาณ)} & \textbf{ลักษณะ} \\ \hline
+    Timeline   & 35  & บรรทัดเดียว กระชับที่สุด แต่ข้อมูลบางส่วนหายไป \\ \hline
+    TOON       & 119 & ตัด \{\} และ "" ออกจาก JSON \\ \hline
+    Key=Value  & 120 & รูปแบบที่ Splunk แสดงผล \\ \hline
+    JSON       & 138 & Output ของขั้นตอน Normalize (ใช้ในการทดลองปัจจุบัน) \\ \hline
+    XML        & 195 & รูปแบบต้นฉบับของ Sysmon \\ \hline
+  \end{tabular}
+\end{table}
+
+ในการทดลองปัจจุบันโครงงานเลือกใช้รูปแบบ JSON เนื่องจากได้มาโดยตรงจากขั้นตอนก่อนหน้า
+ส่วนการเปรียบเทียบ Accuracy ระหว่างรูปแบบต่าง ๆ จะดำเนินการในการทดลองขั้นต่อไป
+
+\section{ขั้นตอนที่ 5: Retrieval-Augmented Generation (RAG)}
+
+RAG ทำหน้าที่เพิ่มบริบทให้ LLM โดยอ้างอิงองค์ความรู้จาก MITRE ATT\&CK
+ฐานความรู้สร้างจากเอกสาร MITRE ATT\&CK Enterprise v19.2 (STIX ทางการ)
+แปลงเป็น JSON และแบ่ง Chunk ตาม Technique และ Sub-technique
+(1 Chunk ต่อ 1 Technique หรือ 1 Sub-technique) รวมทั้งหมด 697 Chunks (222 Techniques + 475 Sub-techniques)
+ดังรูปที่~\ref{fig:rag-kb}
+ข้อความของแต่ละ Chunk ประกอบด้วยชื่อ Tactics และคำอธิบาย (Description) โดยไม่ Embed รหัสเทคนิค
+เหตุผลที่แบ่งถึงระดับ Sub-technique คือคำตอบที่ต้องการอยู่ในระดับ Sub-technique
+และ Sub-technique ภายใต้ Technique เดียวกันมักต่างกันเพียงในคำอธิบาย
+เช่น T1087.001 (\texttt{net user}) กับ T1087.002 (\texttt{net user /domain})
+แต่ละ Chunk ถูกแปลงเป็นเวกเตอร์ด้วย \texttt{qwen3-embedding:0.6b} ผ่าน Ollama
+ความยาวมัธยฐานของ Chunk ประมาณ 1,100 ตัวอักษร (ประมาณ 280 Tokens)
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=\textwidth]{rag_kb_chunks.png}
+  \caption{ตัวอย่างฐานความรู้ MITRE ATT\&CK v19.2 ที่แบ่ง Chunk ตาม Technique และ Sub-technique}
+  \label{fig:rag-kb}
+\end{figure}
+
+Query ที่ใช้ค้นหาในฐานความรู้มีได้ 2 แบบ คือ
+(1) ใช้ Representation Log (JSON) โดยตรง และ
+(2) ให้ LLM แปลง Representation Log เป็นคำอธิบายพฤติกรรมภาษาอังกฤษ (Log Summary) ก่อน
+โดยห้ามใช้ชื่อหรือรหัสเทคนิค ผลลัพธ์ของ RAG คือรายการ Top-$k$ Techniques ที่ใช้เป็น Context ให้ LLM
+
+\section{ขั้นตอนที่ 6: LLM Analysis และ Output}
+
+LLM ที่ใช้คือ Qwen3.5:9B ทำงานภายในเครื่องผ่าน Ollama ร่วมกับ Hermes เป็น Harness
+LLM รับ Context จาก RAG และ Representation Log แล้วระบุเทคนิคการโจมตี
+Prompt ถูกออกแบบให้ LLM ทำงานเป็นลำดับ ได้แก่
+อ่าน Event ที่ Alert ชี้ก่อน $\rightarrow$ พิจารณาว่าคำสั่งทำอะไร $\rightarrow$ ระบุ Technique
+$\rightarrow$ ระบุ Sub-technique ที่ตรงกับรูปแบบคำสั่ง $\rightarrow$ ระบุทางเลือกที่ใกล้เคียงและเหตุผลที่ไม่ใช่
+และตอบในรูปแบบ JSON ที่มีโครงสร้างกำหนด (เช่น พฤติกรรมที่สังเกตได้ ทางเลือกที่พิจารณา รหัสเทคนิค และความมั่นใจ)
+สำหรับกรณีใช้ RAG จะระบุใน Prompt ว่ารายการ Candidate เป็นเพียงคำใบ้ และคำตอบที่ถูกอาจไม่อยู่ในรายการ
+การตั้งค่าในการทดลอง ได้แก่ ปิดโหมด Thinking, Temperature = 0 และ Context Window 16,384 Tokens
+
+เพื่อป้องกันการรั่วไหลของเฉลย ระบบจะตรวจสอบว่า Prompt และ Query ไม่มีรหัสเทคนิค
+(รูปแบบ \texttt{T\#\#\#\#}) หรือรหัส Case ที่บอกคำตอบ ก่อนส่งให้ LLM
+ผลลัพธ์สุดท้ายคือ Investigation Report ที่ระบุเทคนิค ATT\&CK หลักฐาน (Event ที่อ้างอิง) และเหตุผลประกอบ
+
+\section{ต้นแบบ Web Dashboard}
+
+ผลการวิเคราะห์ถูกนำเสนอให้ SOC Analyst ผ่าน Web Dashboard
+ซึ่งรองรับการรับข้อมูล 2 แบบ คือ ดึง Alert จาก Splunk อัตโนมัติ และอัปโหลดไฟล์ Logs ด้วยตนเอง (Manual Investigation)
+หน้า Inbox (รูปที่~\ref{fig:dashboard}) แสดงรายการการสืบสวนทั้งหมด พร้อมแหล่งที่มา ความรุนแรง เวลา
+ชื่อ Alert และ Host สถานะการประมวลผลของ LLM (Pending, Processing, Analyzed, Failed)
+ผลลัพธ์ (เทคนิคที่ระบุได้) และผู้รับผิดชอบ
+นอกจากนี้ยังมีเมนูสำหรับผู้ดูแลระบบ เช่น การเชื่อมต่อ SIEM การตั้งค่า Pipeline
+และการปรับปรุงข้อมูล/ฐานความรู้ ซึ่งกำหนดให้ผู้ดูแลระบบเป็นผู้สั่งปรับปรุงเท่านั้น
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.95\textwidth]{dashboard_prototype.png}
+  \caption{ต้นแบบหน้า Inbox ของ Web Dashboard}
+  \label{fig:dashboard}
+\end{figure}

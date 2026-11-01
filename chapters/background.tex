@@ -17,6 +17,17 @@ SIEM จึงเป็นเครื่องมือหลักของศ
 โดย Logs ถูกจัดเก็บเป็นดัชนี (Index) และสามารถเรียกค้นได้ด้วยภาษา Search Processing Language (SPL)
 หรือผ่าน REST API ซึ่ง Pipeline ของโครงงานใช้สำหรับดึง Logs ที่เกี่ยวข้องกับ Alert
 
+\subsection{Detection Rule และ ES Content Update (ESCU)}
+Alert ใน Splunk เกิดจาก Detection Rule ซึ่งเป็นคำค้น SPL ที่ทำงานตามเงื่อนไข
+Splunk เผยแพร่ชุด Detection Rule ทางการในชื่อ ES Content Update (ESCU)~\cite{splunk-escu}
+ซึ่งติดตั้งเป็น App เดียวและระบุเทคนิค ATT\&CK ที่แต่ละ Rule ตรวจจับ
+Rule แบ่งเป็น 3 ประเภท ได้แก่ \textbf{TTP} (พฤติกรรมการโจมตีชัดเจน สร้าง Alert โดยตรง)
+\textbf{Anomaly} (พฤติกรรมผิดปกติ ส่งคะแนนเข้าระบบความเสี่ยง) และ
+\textbf{Hunting} (ใช้ค้นหาด้วยมือ ไม่สร้าง Alert)
+Alert ที่เกิดจากการโจมตีจริงเรียกว่า True Positive (TP) ส่วน Alert ที่เกิดจากกิจกรรมปกติเรียกว่า False Positive (FP)
+ในโครงงานนี้ใช้ Rule ประเภท TTP และ Anomaly ที่ใช้ข้อมูล Windows Sysmon รวม 829 Rule
+สร้าง Alert จาก Logs ที่ Replay เข้า Splunk เพื่อจำลองสถานการณ์ที่ SOC Analyst ได้รับ Alert จริง
+
 \subsection{SOC Analyst}
 SOC Analyst คือเจ้าหน้าที่ด้านความปลอดภัยไซเบอร์ที่ทำหน้าที่เฝ้าระวัง ตรวจสอบ คัดกรอง
 และวิเคราะห์เหตุการณ์ด้านความปลอดภัย เพื่อระบุภัยคุกคามและสนับสนุนการตอบสนองต่อเหตุการณ์ (Incident Response)
@@ -60,7 +71,11 @@ Linux Audit Daemon (auditd)~\cite{auditd} เป็นระบบบันท�
 Splunk จึงกำหนด Common Information Model (CIM)~\cite{splunk-cim}
 ซึ่งเป็นมาตรฐานชื่อ Field และโครงสร้างข้อมูลร่วม เช่น \texttt{process}, \texttt{parent\_process}, \texttt{user}, \texttt{dest}
 % การ Normalize Logs ให้อยู่ในรูปแบบร่วมทำให้ขั้นตอนถัดไปของ Pipeline ทำงานได้กับ Logs หลายแหล่งโดยไม่ต้องเขียนตรรกะแยก
-โครงงานนำแนวคิดของ CIM มาใช้ในการกำหนดโครงสร้าง Field กลางของโครงงาน เพื่อให้ขั้นตอนถัดไปของ Pipeline ทำงานกับ Logs หลายแหล่งได้ด้วยตรรกะเดียวกัน
+ภายใน Splunk การแปลง Logs ดิบให้เข้ากับ CIM ทำโดย Technology Add-on (TA) เช่น Splunk Add-on for Sysmon
+และ Detection Rule ส่วนใหญ่ค้นผ่าน Data Model ของ CIM เช่น Rule ของ ESCU ที่ใช้ Sysmon 535 จาก 928 Rule
+ค้นผ่าน Data Model \texttt{Endpoint.Processes}
+ขั้นตอน Normalize ของโครงงานจึงแปลง Logs ทุกรูปแบบให้เป็น JSON ที่ใช้ชื่อ Field ตาม CIM
+เพื่อให้ขั้นตอนถัดไปของ Pipeline ทำงานกับ Logs หลายแหล่งได้ด้วยตรรกะเดียวกัน
 
 \section{MITRE ATT\&CK}
 MITRE ATT\&CK~\cite{mitre-attack,strom2018attack} เป็นฐานความรู้ระดับสากลที่รวบรวมพฤติกรรมของผู้โจมตีไซเบอร์จากเหตุการณ์จริง
@@ -76,17 +91,23 @@ ATT\&CK Enterprise เวอร์ชัน 19.2 ที่ใช้ในโค�
 
 \section{ชุดข้อมูลและแนวคิด Scenario Dataset}
 
-\subsection{OTRF Security-Datasets}
-OTRF Security-Datasets~\cite{otrf-security-datasets} เป็นชุดข้อมูลสาธารณะที่บันทึก Logs จากการจำลองการโจมตี
-โดยมีคำอธิบายมุมมองผู้โจมตี (Adversary View) ระบุคำสั่งและการกระทำของผู้โจมตีอย่างละเอียด
-% จึงเหมาะสำหรับใช้เป็น Benchmark ในการออกแบบและวัดผล Pipeline
-จึงใช้เป็นชุดข้อมูลสำหรับทดสอบ (Test Set) ซึ่งประเมินผลเพียงครั้งเดียวหลังกำหนดค่าพารามิเตอร์แล้ว
+\subsection{Splunk Attack Data และ Atomic Red Team}
+Splunk Attack Data~\cite{splunk-attack-data} เป็นคลังชุดข้อมูลของ Splunk Threat Research Team
+ที่บันทึก Logs จากการจำลองการโจมตีใน Lab ที่สร้างด้วยเครื่องมือ attack\_range
+แต่ละชุดมีไฟล์ YAML ระบุเทคนิค ATT\&CK ที่จำลอง แต่ไม่ได้ระบุว่า Event ใดเป็นส่วนของการโจมตี
+ชุดข้อมูลบางส่วนสร้างด้วย Atomic Red Team (ART)~\cite{atomic-red-team}
+ซึ่งเป็นคลังชุดทดสอบการโจมตีขนาดเล็กที่แยกตามเทคนิคและเขียนคำสั่งไว้ชัดเจน
+และคำสั่ง \texttt{Invoke-AtomicTest} ที่ใช้รันจะปรากฏใน Logs เป็นจุดเริ่มต้นของการโจมตี
+จึงสามารถระบุ Event ที่เป็นการโจมตีได้อัตโนมัติจาก Process Tree
+โครงงานจึงใช้ชุดข้อมูล ART ของ Splunk เป็นชุดข้อมูลสำหรับพัฒนา (Development Set)
 
-\subsection{Splunk Attack Data}
-Splunk Attack Data~\cite{splunk-attack-data} เป็นคลังชุดข้อมูลที่จัดตามรหัสเทคนิค ATT\&CK
-แต่ละไฟล์ระบุว่าเป็นเทคนิคใด แต่ไม่ได้ระบุว่า Event ใดเป็นส่วนของการโจมตี
-% โครงงานจึงใช้ชุดข้อมูลนี้เป็น Validation โดย Replay Logs เข้า Splunk Enterprise เพื่อทดสอบในสภาพใกล้เคียงการใช้งานจริง
-โครงงานจึงใช้ชุดข้อมูลนี้เป็นชุดข้อมูลสำหรับพัฒนา (Development Set) โดยระบุ Event สำคัญเพิ่มเติม (Event-level Annotation) เพื่อใช้ปรับพารามิเตอร์ของ Pipeline และ Replay Logs เข้า Splunk Enterprise เพื่อทดสอบในสภาพใกล้เคียงการใช้งานจริง
+\subsection{OTRF Security-Datasets}
+OTRF Security-Datasets~\cite{otrf-security-datasets} (เดิมชื่อ Mordor) เป็นชุดข้อมูลสาธารณะของ Open Threat Research Forge
+ที่บันทึก Logs จากการจำลองการโจมตีใน Lab ของตนเอง โดยใช้เครื่องมืออย่าง Empire และ Covenant
+แบ่งเป็นชุดแบบ Atomic (จำลองพฤติกรรมเดียว) และ Compound (จำลองทั้ง Campaign ที่มีหลายเทคนิค)
+และมี Metadata ส่วน Adversary View ที่บันทึกคำสั่งที่ผู้โจมตีใช้จริง
+เนื่องจากมาจาก Lab และเครื่องมือที่ต่างจาก Splunk จึงใช้เป็นชุดข้อมูลสำหรับทดสอบ (Test Set)
+เพื่อตรวจสอบว่าค่าที่ปรับบนข้อมูลของ Splunk ใช้กับข้อมูลจากแหล่งอื่นได้หรือไม่
 
 \subsection{นิยามที่ใช้ในโครงงาน}
 \begin{itemize}
@@ -96,6 +117,15 @@ Splunk Attack Data~\cite{splunk-attack-data} เป็นคลังชุด�
   \item \textbf{Ground Truth} -- เทคนิค ATT\&CK ที่ใช้สร้าง Scenario นั้น
         เป็น Ground Truth ระดับ Scenario/Dataset ไม่ใช่ Label ของทุก Event
         (1 Scenario Dataset $\rightarrow$ 1 Ground-truth Technique $\rightarrow$ หลาย Events)
+  \item \textbf{Ground Truth ระดับ Event} -- รายการ Events ที่เป็นส่วนของการโจมตีจริง
+        มีเฉพาะใน Development Set ใช้ปรับพารามิเตอร์และวัดสัดส่วนหลักฐานที่ถูกคัดเลือก
+  \item \textbf{Case (กรณีการสืบสวน)} -- หน่วยของการทดลอง ประกอบด้วย 1 Alert และ Logs ของไฟล์นั้น
+  \item \textbf{Anchor} -- Event ที่ Alert ชี้ เป็นจุดเริ่มต้นของ Event Selection
+        หากไฟล์ไม่มี Alert จะใช้ Event การสร้าง Process ของคำสั่งโจมตีเป็น Anchor สำรอง
+  \item \textbf{Development Set / Test Set} -- ชุดข้อมูลสำหรับปรับพารามิเตอร์ (ใช้ได้หลายครั้ง)
+        และชุดข้อมูลสำหรับวัดผล (ใช้ครั้งเดียวหลังล็อกค่า)
+  \item \textbf{Freeze} -- การล็อกค่าพารามิเตอร์ Prompt เวอร์ชันของชุดข้อมูล และ Checksum ก่อนทดสอบ
+  \item \textbf{Leak Check} -- การตรวจสอบว่า Prompt ไม่มีเฉลยหลุดเข้าไป เช่น รหัสเทคนิค หรือชื่อ Detection Rule
   \item \textbf{Noise} -- เหตุการณ์ใน Logs ที่ไม่เกี่ยวข้องกับการวิเคราะห์ รวมถึง Field และ Event ที่ไม่จำเป็น
   \item \textbf{Investigation Context} -- ชุดเหตุการณ์และความรู้ที่เกี่ยวข้องกับเหตุการณ์ที่น่าสงสัย
         ซึ่งถูกจัดเตรียมเพื่อให้ LLM ใช้เหตุผลกับเหตุการณ์นั้น
@@ -160,21 +190,49 @@ Parent สร้าง Child (Sysmon EID 1) และ Process หนึ่งส
 ทำให้สามารถรวบรวม Events ที่เชื่อมโยงกับ Alert ได้โดยไม่ลามไปทั้งระบบ
 
 \section{ตัวชี้วัดที่ใช้ประเมินผล}
+\label{sec:metrics}
+
+หน่วยของการประเมินผลคือกรณีการสืบสวน (Case) ไม่ใช่ราย Event เนื่องจาก Ground Truth อยู่ในระดับ Scenario Dataset
+กำหนดให้ $N$ คือจำนวนกรณีทั้งหมด $y_i$ คือเทคนิคที่เป็นเฉลยของกรณีที่ $i$
+และ $\hat{y}_i$ คือเทคนิคที่ระบบระบุ โดยใช้ตัวชี้วัดดังนี้
+
 \begin{itemize}
-  \item \textbf{Accuracy} -- สัดส่วนกรณีที่ระบบระบุเทคนิคตรงกับ Ground Truth
+  \item \textbf{Exact Match Accuracy} -- สัดส่วนกรณีที่ระบบระบุรหัสเทคนิคตรงกับเฉลยทุกหลัก
+        รวมถึง Sub-technique
         \begin{equation}
-        \mathrm{Accuracy} = \frac{\text{จำนวนกรณีที่ตอบถูก}}{\text{จำนวนกรณีทั้งหมด}}
+        \mathrm{Acc}_{\mathrm{exact}} = \frac{1}{N}\sum_{i=1}^{N} \mathbf{1}\left[\hat{y}_i = y_i\right]
         \end{equation}
-  \item \textbf{Precision, Recall และ Macro F1} -- วัดความแม่นและความครอบคลุมรายเทคนิค
-        แล้วเฉลี่ยทุกเทคนิคอย่างเท่ากัน
+
+  \item \textbf{Parent Match Accuracy} -- สัดส่วนกรณีที่ระบบระบุถูกในระดับ Technique หลัก
+        (เช่น ตอบ T1003.002 เมื่อเฉลยคือ T1003.001 นับว่าถูกในระดับ T1003)
         \begin{equation}
-        P_t = \frac{TP_t}{TP_t+FP_t},\quad
-        R_t = \frac{TP_t}{TP_t+FN_t},\quad
-        \text{Macro-}F_1 = \frac{1}{|T|}\sum_{t\in T}\frac{2P_tR_t}{P_t+R_t}
+        \mathrm{Acc}_{\mathrm{parent}} = \frac{1}{N}\sum_{i=1}^{N} \mathbf{1}\left[\mathrm{parent}(\hat{y}_i) = \mathrm{parent}(y_i)\right]
         \end{equation}
+
+  \item \textbf{RAG hit@$k$} -- สัดส่วนกรณีที่เทคนิคเฉลยอยู่ในรายการ Top-$k$ ที่ RAG ค้นคืนได้
+        ใช้แยกปัญหาของขั้นตอนค้นคืน (Retrieval) ออกจากปัญหาของ LLM
+        \begin{equation}
+        \mathrm{hit@}k = \frac{1}{N}\sum_{i=1}^{N} \mathbf{1}\left[y_i \in R_k(q_i)\right]
+        \end{equation}
+        โดยที่ $R_k(q_i)$ คือรายการเทคนิค $k$ อันดับแรกที่ค้นคืนได้จาก Query $q_i$
+
+  \item \textbf{Evidence Recall} -- สัดส่วนของ Events ที่เป็นการโจมตี (ตาม Ground Truth ระดับ Event)
+        ที่ยังคงอยู่หลังขั้นตอน Event Selection วัดเฉพาะใน Development Set
+        \begin{equation}
+        \mathrm{Recall}_{\mathrm{evidence}} = \frac{|S \cap A|}{|A|}
+        \end{equation}
+        โดยที่ $S$ คือเซตของ Events ที่ถูกคัดเลือก และ $A$ คือเซตของ Events ที่เป็นการโจมตี
+
+  \item \textbf{Token Cost} -- จำนวน Input Token ที่ส่งให้ LLM ในแต่ละกรณี
+        และสัดส่วนจำนวน Events ที่ถูกคัดเลือกต่อ Events ทั้งหมด
+
   \item \textbf{Latency} -- เวลาตั้งแต่รับ Logs จนได้คำตอบ (End-to-end)
-  \item \textbf{Token Cost} -- จำนวน Token ที่ส่งให้ LLM เปรียบเทียบก่อนและหลังผ่าน Pipeline
 \end{itemize}
+
+เนื่องจากจำนวนกรณีทดสอบมีจำกัด ค่าความถูกต้องจะรายงานพร้อมช่วงความเชื่อมั่น 95\%
+ด้วยวิธี Bootstrap~\cite{efron1979} และเปรียบเทียบแต่ละรูปแบบการทดลองกับ Baseline
+ด้วย McNemar's Test~\cite{mcnemar1947} ซึ่งเหมาะกับผลแบบถูก/ผิดที่ทดสอบบนชุดกรณีเดียวกัน
+โดยปรับค่า $p$ ด้วยวิธีของ Holm~\cite{holm1979} เมื่อทดสอบหลายคู่พร้อมกัน
 
 \section{\ifenglish%
 \ifcpe CPE \else ISNE \fi knowledge used, applied, or integrated in this project
@@ -190,7 +248,7 @@ Parent สร้าง Child (Sysmon EID 1) และ Process หนึ่งส
         และการจัดลำดับด้วยคะแนนภายใต้งบประมาณ Token
   \item \textbf{ฐานข้อมูลและการจัดการข้อมูล} -- การ Parse, Normalize และจัดเก็บข้อมูลหลายรูปแบบ
   \item \textbf{วิศวกรรมซอฟต์แวร์} -- การออกแบบสถาปัตยกรรมระบบ การแบ่งโมดูล และการพัฒนา Web Application
-  \item \textbf{ปัญญาประดิษฐ์/การเรียนรู้ของเครื่อง} -- การประเมินผลด้วย Accuracy, Precision, Recall, F1
+  \item \textbf{ปัญญาประดิษฐ์/การเรียนรู้ของเครื่อง} -- การประเมินผลด้วย Accuracy และ Recall การทดสอบนัยสำคัญทางสถิติ
         และการแยกข้อมูลสำหรับพัฒนากับข้อมูลสำหรับทดสอบ
 \end{itemize}
 

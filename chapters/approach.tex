@@ -76,20 +76,200 @@ Input และ Output ของแต่ละขั้นตอนสรุป
   \end{tabular}
 \end{table}
 
+\section{ชุดข้อมูล}
+\label{sec:dataset}
+
+\subsection{การคัดเลือกเทคนิค}
+เทคนิคที่ใช้ทดลองถูกคัดเลือกด้วยเกณฑ์ที่กำหนดไว้ล่วงหน้า ไม่ได้เลือกด้วยมือ
+ดังตารางที่~\ref{tab:technique-funnel}
+ตัวเลขทั้งหมดนับจาก Repository ที่ระบุ Commit ไว้ในตารางที่~\ref{tab:snapshot}
+
+\begin{table}[ht]
+  \centering
+  \caption{ขั้นตอนการคัดเลือกเทคนิคสำหรับการทดลอง}
+  \label{tab:technique-funnel}
+  \small
+  \begin{tabular}{|c|L{0.25\textwidth}|L{0.33\textwidth}|L{0.25\textwidth}|}
+    \hline
+    \textbf{ขั้น} & \textbf{เกณฑ์} & \textbf{ผล} & \textbf{เหตุผล} \\ \hline
+    0 & Metadata ทั้งหมด &
+      Splunk 1,030 ไฟล์ YAML (313 เทคนิค) / OTRF 100 ชุด Windows Atomic & จุดเริ่มต้น \\ \hline
+    1 & Windows Sysmon และระบุเทคนิคเดียว &
+      Splunk 193 เทคนิค / OTRF 87 ชุดที่มี Sysmon EID 1 จริง (47 เทคนิค) &
+      กราฟของวิธี Top-$k$ ใช้ EID 1 และ Ground Truth เป็นเทคนิคเดียว \\ \hline
+    2 & มีในทั้งสองแหล่ง & 40 เทคนิค & Development Set และ Test Set ต้องครอบคลุมเทคนิคเดียวกัน \\ \hline
+    3 & Splunk มีชุดข้อมูล Atomic Red Team & \textbf{23 เทคนิค} & ระบุ Event สำคัญได้อัตโนมัติเฉพาะชุด ART \\ \hline
+  \end{tabular}
+\end{table}
+
+\begin{table}[ht]
+  \centering
+  \caption{เวอร์ชันของ Repository ที่ใช้ (Snapshot)}
+  \label{tab:snapshot}
+  \small
+  \begin{tabular}{|l|l|l|}
+    \hline
+    \textbf{Repository} & \textbf{Commit} & \textbf{วันที่} \\ \hline
+    splunk/attack\_data & \texttt{f08d681} & 29 ต.ค. 2569 \\ \hline
+    OTRF/Security-Datasets & \texttt{d9d40ef} & 20 ก.ย. 2566 (รุ่นล่าสุด) \\ \hline
+    splunk/security\_content (ESCU) & \texttt{dcd2560} & 30 ต.ค. 2569 \\ \hline
+  \end{tabular}
+\end{table}
+
+ชุดข้อมูล T1087.001 ที่ใช้เป็นตัวอย่างตลอดบทนี้ไม่ผ่านเกณฑ์ขั้นที่ 3
+เนื่องจาก Splunk ไม่มีชุดข้อมูล Atomic Red Team ของเทคนิคนี้
+จึงใช้เป็นกรณีนำร่อง (Pilot) สำหรับตรวจสอบว่า Pipeline ทำงานได้ครบทุกขั้นตอนเท่านั้น
+
+\subsection{Development Set และ Test Set}
+\textbf{Development Set} ประกอบด้วยไฟล์ Sysmon จากชุดข้อมูล Atomic Red Team ของ Splunk จำนวน 35 ไฟล์
+ใช้สำหรับระบุ Event สำคัญและปรับพารามิเตอร์ ส่วน \textbf{Test Set} ประกอบด้วยชุดข้อมูล OTRF แบบ Atomic จำนวน 40 ชุด
+ซึ่งคัดจาก 54 ชุดที่ตรงกับ 23 เทคนิค โดยตัดชุดที่ไม่มี EID 1 หรือไฟล์ใช้งานไม่ได้ออก 4 ชุด
+แล้วจำกัดไม่เกิน 3 ชุดต่อเทคนิค ด้วยกฎ ``เลือกชุดที่ใช้เครื่องมือต่างกันก่อน ถ้าเท่ากันเลือกชุดที่เก่ากว่า''
+จำนวนข้อมูลแยกตามเทคนิคแสดงในตารางที่~\ref{tab:dev-test}
+
+เหตุผลที่ใช้ Splunk เป็น Development Set และ OTRF เป็น Test Set คือ
+ชุดข้อมูล Atomic Red Team ของ Splunk ระบุ Event สำคัญได้อัตโนมัติ
+ส่วน OTRF มาจาก Lab และเครื่องมือโจมตีที่ต่างกัน (เช่น Empire และ Covenant)
+จึงทดสอบได้ว่าค่าที่ปรับบนข้อมูลของ Splunk ใช้กับข้อมูลจากแหล่งอื่นได้หรือไม่
+และป้องกันไม่ให้ลักษณะเฉพาะของสภาพแวดล้อมเดียวกันรั่วจาก Development Set ไปยัง Test Set
+
+\begin{table}[ht]
+  \centering
+  \caption{จำนวนข้อมูลใน Development Set และ Test Set แยกตามเทคนิค}
+  \label{tab:dev-test}
+  \small
+  \begin{tabular}{|l|l|c|c|}
+    \hline
+    \textbf{เทคนิค} & \textbf{ชื่อ} & \textbf{Dev (ไฟล์)} & \textbf{Test (ชุด)} \\ \hline
+    T1003.001 & OS Credential Dumping: LSASS Memory & 3 & 3 \\ \hline
+    T1003.002 & OS Credential Dumping: Security Account Manager & 1 & 3 \\ \hline
+    T1003.003 & OS Credential Dumping: NTDS & 1 & 3 \\ \hline
+    T1021.002 & Remote Services: SMB/Windows Admin Shares & 3 & 3 \\ \hline
+    T1047     & Windows Management Instrumentation & 1 & 3 \\ \hline
+    T1053.005 & Scheduled Task/Job: Scheduled Task & 1 & 3 \\ \hline
+    T1069.001 & Permission Groups Discovery: Local Groups & 1 & 2 \\ \hline
+    T1112     & Modify Registry & 4 & 3 \\ \hline
+    T1197     & BITS Jobs & 1 & 1 \\ \hline
+    T1218.001 & System Binary Proxy Execution: Compiled HTML File & 2 & 1 \\ \hline
+    T1218.002 & System Binary Proxy Execution: Control Panel & 1 & 1 \\ \hline
+    T1218.004 & System Binary Proxy Execution: InstallUtil & 2 & 1 \\ \hline
+    T1218.005 & System Binary Proxy Execution: Mshta & 2 & 3 \\ \hline
+    T1218.010 & System Binary Proxy Execution: Regsvr32 & 1 & 1 \\ \hline
+    T1220     & XSL Script Processing & 1 & 1 \\ \hline
+    T1222.001 & Windows File and Directory Permissions Modification & 1 & 1 \\ \hline
+    T1543.003 & Create or Modify System Process: Windows Service & 2 & 1 \\ \hline
+    T1546.003 & Event Triggered Execution: WMI Event Subscription & 1 & 1 \\ \hline
+    T1547.001 & Boot or Logon Autostart: Registry Run Keys & 2 & 1 \\ \hline
+    T1548.002 & Abuse Elevation Control: Bypass UAC & 1 & 1 \\ \hline
+    T1550.002 & Use Alternate Authentication Material: Pass the Hash & 1 & 1 \\ \hline
+    T1562.004 & Impair Defenses: Disable or Modify System Firewall & 1 & 1 \\ \hline
+    T1574.001 & Hijack Execution Flow: DLL & 1 & 1 \\ \hline
+    \multicolumn{2}{|r|}{\textbf{รวม}} & \textbf{35} & \textbf{40} \\ \hline
+  \end{tabular}
+\end{table}
+
+ชุดข้อมูลใน Test Set บางชุดมีป้ายกำกับเทคนิคที่น่าสงสัย เช่น ชุด Rubeus ASKTGT ที่ระบุเป็น T1003.003
+แต่เป็นพฤติกรรมเกี่ยวกับ Kerberos Ticket และชุด MSBuild ที่ระบุเป็น T1047
+ซึ่งจะทบทวนก่อนล็อกค่าการทดลอง หากตัดชุดใดออกจะเลือกชุดถัดไปตามกฎเดิม
+นอกจากนี้ จำนวนข้อมูลข้างต้นยังเป็นค่าสูงสุด เพราะยังต้องผ่านขั้นตอนคัดกรองในหัวข้อ~\ref{sec:case-prep}
+
+\subsection{รูปแบบ Logs ดิบ}
+แม้ใช้เฉพาะ Windows Sysmon แต่ Logs ดิบยังมี 3 รูปแบบ (ตารางที่~\ref{tab:raw-formats})
+ขั้นตอน Normalize จึงจำเป็นต่อการทำให้ขั้นตอนถัดไปทำงานกับข้อมูลทุกแหล่งได้ด้วยตรรกะเดียวกัน
+สำหรับ Linux Auditd แม้ Splunk มีชุดข้อมูล 73 ไฟล์ (33 เทคนิค) แต่ OTRF มีชุดข้อมูล Linux แบบ Atomic เพียง 2 ชุด
+และไม่ตรงกับเทคนิคใดของ Splunk จึงสร้าง Development Set และ Test Set ข้ามแหล่งไม่ได้
+ระบบจึงรองรับ Auditd ในขั้นตอน Normalize แต่ไม่ประเมินความถูกต้อง
+
+\begin{table}[ht]
+  \centering
+  \caption{รูปแบบ Logs ดิบที่ต้อง Normalize}
+  \label{tab:raw-formats}
+  \small
+  \begin{tabular}{|l|l|l|}
+    \hline
+    \textbf{แหล่ง} & \textbf{รูปแบบ} & \textbf{จำนวน} \\ \hline
+    Splunk & XmlWinEventLog (XML) & Development Set ทั้งหมด \\ \hline
+    OTRF & JSON แบบแบน (\texttt{Channel}, \texttt{EventID}) & 104 ไฟล์ \\ \hline
+    OTRF & JSON ซ้อนชั้นของ Winlogbeat 6 (\texttt{log\_name}, \texttt{event\_id}) & 2 ไฟล์ \\ \hline
+  \end{tabular}
+\end{table}
+
+\section{การสร้าง Alert}
+\label{sec:alert}
+
+เพื่อให้จุดเริ่มต้นของการสืบสวนใกล้เคียงการใช้งานจริง Alert ในการทดลองสร้างจาก Detection Rule ทางการของ Splunk (ESCU)~\cite{splunk-escu}
+แทนการกำหนดเอง ESCU ติดตั้งเป็น App เดียวและได้ Rule ทั้งหมดในครั้งเดียว
+App ที่ใช้แสดงในตารางที่~\ref{tab:splunk-apps}
+จาก Rule ที่ใช้งานได้ทั้งหมด 2,078 Rule มี 928 Rule ที่ใช้ Windows Sysmon
+แบ่งเป็นประเภท TTP 484 Rule, Anomaly 345 Rule และ Hunting 99 Rule
+โครงงานใช้ประเภท TTP และ Anomaly รวม 829 Rule เนื่องจาก Hunting ไม่สร้าง Alert
+
+\begin{table}[ht]
+  \centering
+  \caption{Splunk และ App ที่ใช้สร้าง Alert}
+  \label{tab:splunk-apps}
+  \small
+  \begin{tabular}{|l|c|c|}
+    \hline
+    \textbf{App} & \textbf{Splunkbase ID} & \textbf{เวอร์ชัน} \\ \hline
+    Splunk Common Information Model & 1621 & 8.5.0 \\ \hline
+    Splunk Add-on for Sysmon & 5709 & 5.0.0 \\ \hline
+    Splunk Add-on for Microsoft Windows & 742 & 10.0.1 \\ \hline
+    ES Content Update (ESCU) & 3449 & 6.10.0 \\ \hline
+    Splunk Enterprise (Docker Image \texttt{splunk/splunk}) & -- & 9.3 \\ \hline
+  \end{tabular}
+\end{table}
+
+ขั้นตอนการสร้าง Alert มีดังนี้
+\begin{enumerate}
+  \item ติดตั้ง App ทั้ง 4 ตัวบน Splunk Enterprise 9.3 ใน Docker (ใช้ License แบบ Trial หรือ Developer
+        เนื่องจาก Splunk Free ไม่รองรับ Alert และ Scheduled Search)
+  \item แปลงชุดข้อมูล OTRF จาก JSON เป็น Sysmon XML ก่อน Replay
+        เนื่องจาก Splunk Add-on for Sysmon อ่านเฉพาะรูปแบบ XmlWinEventLog
+  \item Replay Logs เข้า Splunk ทีละไฟล์ แล้วสั่งรัน Rule ทั้ง 829 Rule ผ่าน REST API
+        เพื่อให้ทราบว่า Alert แต่ละรายการมาจากไฟล์ใด
+  \item ระบุว่า Alert เป็น True Positive หรือ False Positive
+        โดย Development Set ตรวจจาก Process Tree ของ Atomic Red Team
+        และ Test Set ตรวจจาก Rule ที่คู่กับชุดข้อมูลเทียบกับ Adversary View
+\end{enumerate}
+
+ใน Development Set มี 20 จาก 23 เทคนิคที่มี Rule ประเภท TTP หรือ Anomaly อย่างน้อย 1 Rule
+ที่ทดสอบกับชุดข้อมูลนั้น ส่วนอีก 3 เทคนิค (T1550.002, T1562.004 และ T1574.001) คาดว่าต้องใช้ Anchor สำรอง
+ในการทดลองรอบนี้ใช้ Alert ที่เป็น True Positive 1 รายการต่อไฟล์ ส่วน False Positive นับไว้เพื่อรายงานเท่านั้น
+การเลือกหรือจัดกลุ่ม Alert เมื่อมีหลายรายการเป็นประเด็นที่จะศึกษาต่อ
+ข้อมูลที่ส่งให้ LLM คือ Event ที่ทำให้เกิด Alert โดยตัดชื่อ Rule และป้ายกำกับ ATT\&CK ออก
+เพื่อให้ LLM ต้องระบุเทคนิคจากหลักฐานเอง
+
+\section{การเตรียมกรณีทดสอบ}
+\label{sec:case-prep}
+
+ก่อนการทดลอง ชุดข้อมูลทุกชุดผ่านขั้นตอนเตรียมกรณีทดสอบ (Case) ดังนี้
+\begin{enumerate}
+  \item \textbf{Freeze} -- ระบุ Commit ของทุก Repository และบันทึก Checksum ของทุกไฟล์
+  \item \textbf{Normalize} -- แปลง Logs ทั้ง 3 รูปแบบเป็น JSON ตามโครงสร้าง CIM
+  \item \textbf{Screening} -- ไฟล์ของ Splunk ต้องมี EID 1 และร่องรอยการรัน Atomic Red Team
+        ส่วนชุดของ OTRF ต้องมี EID 1 ที่ตรงกับคำสั่งใน Adversary View และทบทวนชุดที่ป้ายกำกับน่าสงสัย
+  \item \textbf{สร้าง Alert} -- ตามหัวข้อ~\ref{sec:alert}
+  \item \textbf{สร้างกรณีทดสอบ} -- 1 Alert ที่เป็น True Positive = 1 กรณี
+        ไฟล์ที่ไม่มี Alert ใช้ EID 1 ของคำสั่งโจมตีเป็น Anchor สำรองและติดธงแยกไว้
+  \item \textbf{Leak Check} -- ตัดชื่อ Rule ป้ายกำกับ ATT\&CK และข้อความรูปแบบ \texttt{T\#\#\#\#} ออกจากทุก Prompt
+\end{enumerate}
+
 \section{ขั้นตอนที่ 1: การรับ Alert และ Raw Logs จาก SIEM}
 
-Logs จากชุดข้อมูลถูก Replay เข้า Splunk Enterprise เพื่อจำลองสภาพแวดล้อม SIEM จริง
-เมื่อมี Alert เกิดขึ้น (หรือในการทดลองใช้ Case Configuration จำลอง Alert)
-Pipeline จะดึง Logs ที่เกี่ยวข้องจาก Splunk ผ่าน REST API และบันทึกเป็นไฟล์ JSON Lines
+เมื่อมี Alert เกิดขึ้นจาก Detection Rule ใน Splunk (หัวข้อ~\ref{sec:alert})
+Pipeline จะใช้ Event ที่ Alert ชี้เป็น Anchor และดึง Logs ของไฟล์เดียวกันจาก Splunk ผ่าน REST API
+แล้วบันทึกเป็นไฟล์ JSON Lines
 สำหรับชุดข้อมูลตัวอย่าง T1087.001 ซึ่งเป็น Windows Sysmon Logs ใน Splunk
-มีจำนวน 11,090 events ในช่วงเวลาประมาณ 15 นาที (ขนาดไฟล์ XML ประมาณ 16.826 MB)
+มีจำนวน 11,090 Events ในช่วงเวลาประมาณ 15 นาที (ขนาดไฟล์ XML ประมาณ 16.8 MB)
 
 \section{ขั้นตอนที่ 2: Normalize}
 
 Raw Logs จากแต่ละแหล่งมีรูปแบบต่างกัน เช่น Sysmon ใน Splunk อยู่ในรูป \texttt{XmlWinEventLog}
 และ Auditd เป็นข้อความหลาย Record ต่อเหตุการณ์
+และชุดข้อมูล OTRF อยู่ในรูป JSON 2 แบบ (ตารางที่~\ref{tab:raw-formats})
 ขั้นตอน Normalize จะ Parse Logs แล้วแปลงเป็น JSON ที่มีโครงสร้าง Field ร่วม (Common Field Structure)
-ตามแนวทางของ Splunk CIM~\cite{splunk-cim} เช่น \texttt{EventID}, \texttt{SystemTime}, \texttt{RecordNumber},
+ตามชื่อ Field ของ Splunk CIM~\cite{splunk-cim} ตัวอย่าง Field ที่ใช้ เช่น \texttt{EventID}, \texttt{SystemTime}, \texttt{RecordNumber},
 \texttt{Channel}, \texttt{Image}, \texttt{CommandLine}, \texttt{ProcessGuid}, \texttt{ParentProcessGuid} และ \texttt{User}
 ดังตัวอย่างในรูปที่~\ref{fig:normalize}
 ผลลัพธ์ทำให้ขั้นตอนถัดไปทำงานกับ Logs จากทั้ง Windows และ Linux ได้ด้วยตรรกะเดียวกัน
@@ -156,17 +336,34 @@ Event Selection ตอบคำถามว่า \emph{``จะส่งเห�
 
 \subsection{Graph: สร้างกราฟความสัมพันธ์ของ Process}
 สร้างกราฟความสัมพันธ์ระหว่าง Process และ Event โดยมีโหนดเป็น Process (ระบุด้วย ProcessGuid)
-และเส้นเชื่อม 3 ประเภท ได้แก่
-(1) Parent $\rightarrow$ Child จาก Sysmon EID 1 (Process Creation)
-(2) Process Access จาก EID 10 และ
-(3) File $\rightarrow$ Exec จาก EID 11 (ไฟล์ที่ถูกสร้างแล้วถูกรัน)
+และเส้นเชื่อม 3 ประเภท ดังตารางที่~\ref{tab:graph-edges}
+ทุก Event ถูกแนบกับโหนดของ Process เจ้าของ เมื่อการท่องกราฟไปถึงโหนดใดจะได้ Events ทั้งหมดของโหนดนั้น
+ส่วน Process ที่ปรากฏเป็น Parent แต่ไม่มี EID 1 ในไฟล์ Log จะถูกตั้งเป็นโหนด Boundary ซึ่งเป็นจุดหยุดการท่องกราฟ
+
+\begin{table}[ht]
+  \centering
+  \caption{ประเภทเส้นเชื่อมในกราฟความสัมพันธ์ของ Process}
+  \label{tab:graph-edges}
+  \small
+  \begin{tabular}{|l|L{0.32\textwidth}|c|c|}
+    \hline
+    \textbf{เส้นเชื่อม} & \textbf{สร้างจาก} & \textbf{ใช้ท่องกราฟ} & \textbf{ระยะ (Cost)} \\ \hline
+    Parent--Child & EID 1: \texttt{ParentProcessGuid} $\rightarrow$ \texttt{ProcessGuid} & ใช่ & 1 \\ \hline
+    File--Exec & EID 11 ของ Process A สร้างไฟล์ X แล้ว EID 1 ของ Process B รันไฟล์ X & ใช่ & 1 \\ \hline
+    Process Access & EID 10: Source $\rightarrow$ Target & ไม่ใช่ (แนบเป็นหลักฐาน) & 2 \\ \hline
+  \end{tabular}
+\end{table}
+
+\noindent
+Process Access (EID 10) ไม่ถูกใช้เป็นเส้นทางเดิน เนื่องจากมีสัดส่วนสูงใน Logs และส่วนใหญ่เป็นกิจกรรมปกติของระบบปฏิบัติการ
+แต่จะถูกแนบเป็น Candidate ของโหนดที่เดินถึงแล้ว เพื่อให้ยังเห็นพฤติกรรมสำคัญ เช่น การเข้าถึงหน่วยความจำของ \texttt{lsass.exe}
 
 \subsection{Traverse: ท่องกราฟจากจุดที่ Alert ชี้}
 เริ่มจาก Process ที่ Alert ชี้ (Anchor) แล้วขยายไปยัง Parent และ Child Process
 โดยเก็บเฉพาะบรรพบุรุษและลูกหลานโดยตรงที่อยู่ในระยะที่กำหนด
 เพื่อให้ได้ Candidate Events ที่เกี่ยวข้องกับ Alert โดยไม่ลามไปทั้งระบบ ตามกฎดังนี้
 \begin{enumerate}
-  \item เดินตามความสัมพันธ์ Parent $\rightarrow$ Child
+  \item เดินตามเส้นเชื่อม Parent--Child และ File--Exec โดยหาเส้นทางที่มีระยะรวมน้อยที่สุด (Dijkstra)
   \item เดินทางเดียว คือขึ้นตรงหรือลงตรง ไม่เลี้ยวเข้ากิ่งข้างเคียง
   \item หยุดเมื่อครบจำนวน Hop สูงสุด หรือเจอ Boundary
         (Process ที่รู้ว่ามีอยู่ แต่ไม่มี EID 1 หรือบันทึกการเกิดในไฟล์ Log)

@@ -159,32 +159,43 @@ Normalize Logs ให้อยู่ในรูปแบบมาตรฐา�
 
 \subsection{\ifenglish Software scope\else ขอบเขตด้านซอฟต์แวร์\fi}
 \begin{enumerate}
-    \item ใช้ชุดข้อมูลสาธารณะที่มี Ground Truth จำนวน 2 ชุด ได้แก่
-          Splunk Attack Data~\cite{splunk-attack-data} เป็นชุดข้อมูลสำหรับพัฒนา
-          (Development Set) ใช้ระบุ Event สำคัญ (Event-level Annotation)
-          และปรับพารามิเตอร์ของ Pipeline และ
-          OTRF Security-Datasets~\cite{otrf-security-datasets} เป็นชุดข้อมูลสำหรับทดสอบ
-          (Test Set) ซึ่งใช้ประเมินผลเพียงครั้งเดียวหลังกำหนดค่าพารามิเตอร์แล้ว
-          โดยนำ Logs ไป Replay เข้า Splunk Enterprise เพื่อจำลองการทำงานของระบบ SIEM
+    \item ใช้ชุดข้อมูลสาธารณะที่มี Ground Truth จำนวน 2 แหล่ง ได้แก่
+          Splunk Attack Data~\cite{splunk-attack-data} เฉพาะชุดที่สร้างด้วย Atomic Red Team~\cite{atomic-red-team}
+          จำนวน 35 ไฟล์ เป็นชุดข้อมูลสำหรับพัฒนา (Development Set)
+          ใช้ระบุ Event สำคัญ (Event-level Annotation) และปรับพารามิเตอร์ของ Pipeline
+          และ OTRF Security-Datasets~\cite{otrf-security-datasets} แบบ Atomic จำนวน 40 ชุด
+          เป็นชุดข้อมูลสำหรับทดสอบ (Test Set) ซึ่งใช้ประเมินผลเพียงครั้งเดียวหลังกำหนดค่าพารามิเตอร์แล้ว
 
-    \item ออกแบบให้รองรับ Logs ในรูปแบบ Windows Sysmon~\cite{sysmon}
-          และ Linux Auditd~\cite{auditd}
+    \item ประเมินผลกับเทคนิค MITRE ATT\&CK จำนวน 23 เทคนิค ที่คัดเลือกตามเกณฑ์ที่กำหนดไว้ล่วงหน้า
+          (รายละเอียดในบทที่ 3) โดยแต่ละชุดข้อมูลจำลองการโจมตีเพียงเทคนิคเดียว
+          และใช้ชุดข้อมูล T1087.001 เป็นกรณีนำร่อง (Pilot) ซึ่งไม่นับรวมในผลการประเมินหลัก
 
-    \item กำหนดหน่วยการวิเคราะห์เป็น 1 Alert ต่อ 1 กรณีการสืบสวน
-          (Alert-centric) โดยรับ Alert จากระบบ SIEM/EDR ที่มีอยู่แล้ว
+    \item การประเมินความถูกต้องใช้ Logs ในรูปแบบ Windows Sysmon~\cite{sysmon}
+          ส่วน Linux Auditd~\cite{auditd} รองรับในขั้นตอน Normalize และทดสอบในระดับการทำงานของระบบ
+          แต่ไม่ประเมินความถูกต้อง เนื่องจากไม่มีชุดข้อมูลที่ใช้สร้างทั้ง Development Set และ Test Set ได้
+
+    \item กำหนดหน่วยการวิเคราะห์เป็น 1 Alert ต่อ 1 กรณีการสืบสวน (Alert-centric)
+          โดย Alert สร้างจาก Detection Rule ทางการของ Splunk (ES Content Update: ESCU)~\cite{splunk-escu}
+          เมื่อ Replay Logs เข้า Splunk Enterprise และใช้ Alert ที่เป็นการโจมตีจริง (True Positive) 1 รายการต่อไฟล์
+          หากไฟล์ใดไม่มี Alert จะใช้ Event การสร้าง Process ของคำสั่งโจมตีเป็นจุดเริ่มต้นแทน
           โครงงานนี้ไม่ได้พัฒนาระบบตรวจจับภัยคุกคามขึ้นมาแทน SIEM/EDR
 
     \item ใช้ LLM รุ่นเดียวกันตลอดการทดลอง คือ Qwen3.5 9B
           ซึ่งทำงานภายในเครื่องผ่าน Ollama โดยเปลี่ยนวิธีการสร้าง
           Investigation Context และการใช้ RAG ตามรูปแบบการทดลอง
 
-    \item Ground Truth อยู่ในระดับ Scenario Dataset โดยแต่ละ
-          Scenario Dataset กำหนดเทคนิค MITRE ATT\&CK ที่เป็นเฉลย
-          สำหรับใช้ประเมินผลเท่านั้น และไม่ได้นำมาใช้ฝึกสอนโมเดล
+    \item Ground Truth ระดับ Scenario Dataset คือเทคนิค MITRE ATT\&CK ที่ใช้สร้างชุดข้อมูล
+          ใช้สำหรับประเมินผลเท่านั้น และไม่ได้นำมาใช้ฝึกสอนโมเดล
+          ส่วน Ground Truth ระดับ Event มีเฉพาะใน Development Set
+          ใช้สำหรับปรับพารามิเตอร์และวัดสัดส่วนหลักฐานที่ถูกคัดเลือก
 
-    \item ผลลัพธ์ของระบบประกอบด้วยเทคนิค MITRE ATT\&CK ที่ LLM
-          ระบุ พร้อมหลักฐานจาก Logs และเหตุผลประกอบการวิเคราะห์
+    \item ผลลัพธ์ของระบบประกอบด้วยเทคนิค MITRE ATT\&CK ที่ LLM ระบุ
+          พร้อมหลักฐานจาก Logs และเหตุผลประกอบการวิเคราะห์
           โดยนำเสนอในรูปแบบ Investigation Report ผ่าน Web Dashboard
+
+    \item สิ่งที่อยู่นอกขอบเขต ได้แก่ การจำแนก Alert ว่าเป็น True Positive หรือ False Positive
+          การวิเคราะห์ชุดข้อมูลที่มีหลายเทคนิคในเหตุการณ์เดียว (เช่น การจำลองกลุ่ม APT)
+          และการประเมินความถูกต้องบน Linux Auditd
 \end{enumerate}
 
 % \section{\ifenglish Expected outcomes\else ประโยชน์ที่ได้รับ\fi}
@@ -261,6 +272,11 @@ Normalize Logs ให้อยู่ในรูปแบบมาตรฐา�
     \item \textbf{Splunk Enterprise} -- ระบบ SIEM สำหรับรับและจัดเก็บ
           Logs ที่ Replay จากชุดข้อมูล และเป็นแหล่งข้อมูลที่ Pipeline
           ใช้ดึง Logs ผ่าน REST API
+
+    \item \textbf{Docker และ Splunk Apps} -- ติดตั้ง Splunk Enterprise 9.3 ใน Docker
+          ร่วมกับ Splunk Common Information Model, Splunk Add-on for Sysmon,
+          Splunk Add-on for Microsoft Windows และ ES Content Update (ESCU)
+          สำหรับสร้าง Alert จาก Detection Rule
 
     \item \textbf{Python} -- ภาษาหลักที่ใช้พัฒนา Pipeline
           ได้แก่ การ Parse และ Normalize Logs, Event Selection,
