@@ -28,7 +28,7 @@ SOC Analyst คือเจ้าหน้าที่ด้านความ�
 System Monitor (Sysmon)~\cite{sysmon} เป็นบริการของ Microsoft Sysinternals
 ที่บันทึกกิจกรรมของระบบปฏิบัติการ Windows อย่างละเอียดลงใน Windows Event Log
 โดยแต่ละประเภทกิจกรรมมีหมายเลข Event ID เฉพาะ ตัวอย่าง Event ID ที่สำคัญต่อโครงงานแสดงในตารางที่~\ref{tab:sysmon-eid}
-ทุก Process ที่ Sysmon บันทึกจะมีตัวระบุ \texttt{ProcessGuid} ที่ไม่ซ้ำกัน
+Events ที่เกี่ยวข้องกับ Process จะมีตัวระบุ \texttt{ProcessGuid} ที่ไม่ซ้ำกัน
 และ Event ID 1 จะบันทึก \texttt{ParentProcessGuid} ไว้ด้วย
 จึงสามารถนำมาสร้างความสัมพันธ์แบบ Parent--Child ระหว่าง Process ได้
 
@@ -52,13 +52,15 @@ Linux Audit Daemon (auditd)~\cite{auditd} เป็นระบบบันท�
 เช่น การเรียกใช้ System Call การรันคำสั่ง และการเข้าถึงไฟล์
 โดยหนึ่งเหตุการณ์อาจประกอบด้วยหลาย Record (เช่น \texttt{SYSCALL}, \texttt{EXECVE}, \texttt{PATH})
 ที่เชื่อมกันด้วยหมายเลข Event เดียวกัน
+ในโครงงานนี้ Auditd อยู่ในขอบเขตการออกแบบ ส่วนการทดลองใช้ Windows Sysmon
 
 \section{Common Information Model (CIM)}
 เนื่องจาก Logs จากแต่ละแหล่งมีรูปแบบและชื่อ Field แตกต่างกัน
 (เช่น Sysmon เป็น XML ส่วน Auditd เป็นข้อความแบบ Key=Value)
 Splunk จึงกำหนด Common Information Model (CIM)~\cite{splunk-cim}
 ซึ่งเป็นมาตรฐานชื่อ Field และโครงสร้างข้อมูลร่วม เช่น \texttt{process}, \texttt{parent\_process}, \texttt{user}, \texttt{dest}
-การ Normalize Logs ให้อยู่ในรูปแบบร่วมทำให้ขั้นตอนถัดไปของ Pipeline ทำงานได้กับ Logs หลายแหล่งโดยไม่ต้องเขียนตรรกะแยก
+% การ Normalize Logs ให้อยู่ในรูปแบบร่วมทำให้ขั้นตอนถัดไปของ Pipeline ทำงานได้กับ Logs หลายแหล่งโดยไม่ต้องเขียนตรรกะแยก
+โครงงานนำแนวคิดของ CIM มาใช้ในการกำหนดโครงสร้าง Field กลางของโครงงาน เพื่อให้ขั้นตอนถัดไปของ Pipeline ทำงานกับ Logs หลายแหล่งได้ด้วยตรรกะเดียวกัน
 
 \section{MITRE ATT\&CK}
 MITRE ATT\&CK~\cite{mitre-attack,strom2018attack} เป็นฐานความรู้ระดับสากลที่รวบรวมพฤติกรรมของผู้โจมตีไซเบอร์จากเหตุการณ์จริง
@@ -77,12 +79,14 @@ ATT\&CK Enterprise เวอร์ชัน 19.2 ที่ใช้ในโค�
 \subsection{OTRF Security-Datasets}
 OTRF Security-Datasets~\cite{otrf-security-datasets} เป็นชุดข้อมูลสาธารณะที่บันทึก Logs จากการจำลองการโจมตี
 โดยมีคำอธิบายมุมมองผู้โจมตี (Adversary View) ระบุคำสั่งและการกระทำของผู้โจมตีอย่างละเอียด
-จึงเหมาะสำหรับใช้เป็น Benchmark ในการออกแบบและวัดผล Pipeline
+% จึงเหมาะสำหรับใช้เป็น Benchmark ในการออกแบบและวัดผล Pipeline
+จึงใช้เป็นชุดข้อมูลสำหรับทดสอบ (Test Set) ซึ่งประเมินผลเพียงครั้งเดียวหลังกำหนดค่าพารามิเตอร์แล้ว
 
 \subsection{Splunk Attack Data}
 Splunk Attack Data~\cite{splunk-attack-data} เป็นคลังชุดข้อมูลที่จัดตามรหัสเทคนิค ATT\&CK
 แต่ละไฟล์ระบุว่าเป็นเทคนิคใด แต่ไม่ได้ระบุว่า Event ใดเป็นส่วนของการโจมตี
-โครงงานจึงใช้ชุดข้อมูลนี้เป็น Validation โดย Replay Logs เข้า Splunk Enterprise เพื่อทดสอบในสภาพใกล้เคียงการใช้งานจริง
+% โครงงานจึงใช้ชุดข้อมูลนี้เป็น Validation โดย Replay Logs เข้า Splunk Enterprise เพื่อทดสอบในสภาพใกล้เคียงการใช้งานจริง
+โครงงานจึงใช้ชุดข้อมูลนี้เป็นชุดข้อมูลสำหรับพัฒนา (Development Set) โดยระบุ Event สำคัญเพิ่มเติม (Event-level Annotation) เพื่อใช้ปรับพารามิเตอร์ของ Pipeline และ Replay Logs เข้า Splunk Enterprise เพื่อทดสอบในสภาพใกล้เคียงการใช้งานจริง
 
 \subsection{นิยามที่ใช้ในโครงงาน}
 \begin{itemize}
@@ -109,8 +113,8 @@ LLM ประมวลผลข้อความในหน่วย \textbf{T
 โครงงานเลือกใช้ LLM ขนาดเล็กที่ทำงานภายในเครื่อง ได้แก่ Qwen3.5 ขนาด 9B พารามิเตอร์
 ซึ่งเป็นโมเดลในตระกูล Qwen~\cite{qwen3} ที่เผยแพร่แบบ Open-weight
 และรันผ่าน Ollama~\cite{ollama} ที่ให้บริการโมเดลผ่าน API ภายในเครื่อง
-ข้อดีของ Local LLM คือ Logs ขององค์กรไม่ต้องถูกส่งออกไปภายนอก และไม่มีค่าใช้จ่ายต่อ Token
-แต่ความสามารถในการใช้เหตุผลต่ำกว่าโมเดลเชิงพาณิชย์ขนาดใหญ่
+ข้อดีของ Local LLM คือ Logs ขององค์กรไม่ต้องถูกส่งออกไปภายนอก และไม่มีค่าบริการ API ตามจำนวน Token
+แต่โดยทั่วไปมีความสามารถจำกัดกว่าโมเดลเชิงพาณิชย์ขนาดใหญ่
 เป้าหมายของโครงงานจึงเป็นการแสดงว่า Context ที่ดีช่วยให้โมเดลขนาดเล็กตอบได้ถูกต้อง
 
 \section{Retrieval-Augmented Generation (RAG)}
@@ -136,13 +140,23 @@ RAG~\cite{lewis2020rag} คือเทคนิคที่เสริมค�
 \textbf{TOON} (Token-Oriented Object Notation~\cite{toon-format} ที่ตัดเครื่องหมาย \{\}, "" ออกเพื่อลด Token),
 \textbf{Key=Value} (รูปแบบที่ Splunk ใช้แสดงผล) และ
 \textbf{Timeline} (สรุปเหตุการณ์เป็นบรรทัดเดียวต่อ Event ใช้ Token น้อยที่สุดแต่ข้อมูลบางส่วนหายไป)
+นอกจากนี้ยังมีรูปแบบ \textbf{Summary} ซึ่งให้ LLM แปลง Logs เป็นคำอธิบายพฤติกรรมภาษาธรรมชาติก่อน โดยไม่ระบุชื่อหรือรหัสเทคนิค เพื่อใช้เป็น Input หรือ Query สำหรับค้นหาในฐานความรู้
+
+% \section{ความสัมพันธ์เชิงกราฟของ Process}
+% ความสัมพันธ์ระหว่าง Process สามารถแทนด้วยกราฟมีทิศทาง $G=(V,E)$
+% โดยแต่ละโหนด $v \in V$ คือ Process (ระบุด้วย ProcessGuid)
+% และเส้นเชื่อม $e \in E$ แทนความสัมพันธ์ เช่น Parent สร้าง Child (Sysmon EID 1)
+% หรือ Process หนึ่งเข้าถึงอีก Process (EID 10)
+% การท่องกราฟ (Graph Traversal) แบบ Breadth-First Search ที่จำกัดจำนวนขั้น (Hop)
+% ทำให้สามารถรวบรวม Events ที่เชื่อมโยงกับ Alert ได้โดยไม่ลามไปทั้งระบบ
 
 \section{ความสัมพันธ์เชิงกราฟของ Process}
 ความสัมพันธ์ระหว่าง Process สามารถแทนด้วยกราฟมีทิศทาง $G=(V,E)$
 โดยแต่ละโหนด $v \in V$ คือ Process (ระบุด้วย ProcessGuid)
-และเส้นเชื่อม $e \in E$ แทนความสัมพันธ์ เช่น Parent สร้าง Child (Sysmon EID 1)
-หรือ Process หนึ่งเข้าถึงอีก Process (EID 10)
-การท่องกราฟ (Graph Traversal) แบบ Breadth-First Search ที่จำกัดจำนวนขั้น (Hop)
+และเส้นเชื่อม $e \in E$ แทนความสัมพันธ์เชิงสาเหตุ ได้แก่
+Parent สร้าง Child (Sysmon EID 1) และ Process หนึ่งสร้างไฟล์ที่ถูกรันเป็นอีก Process (EID 11 ตามด้วย EID 1)
+ส่วน Process Access (EID 10) ใช้เป็นหลักฐานประกอบของโหนดที่เกี่ยวข้อง แต่ไม่ใช้เป็นเส้นทางในการท่องกราฟ
+การท่องกราฟโดยหาเส้นทางสั้นที่สุด (Shortest Path) จากจุดที่ Alert ชี้และจำกัดระยะทางสูงสุด
 ทำให้สามารถรวบรวม Events ที่เชื่อมโยงกับ Alert ได้โดยไม่ลามไปทั้งระบบ
 
 \section{ตัวชี้วัดที่ใช้ประเมินผล}
@@ -172,7 +186,7 @@ RAG~\cite{lewis2020rag} คือเทคนิคที่เสริมค�
   \item \textbf{ความมั่นคงปลอดภัยของระบบคอมพิวเตอร์และเครือข่าย} -- ความเข้าใจพฤติกรรมการโจมตี
         Logs ด้านความปลอดภัย และกระบวนการสืบสวนเหตุการณ์
   \item \textbf{ระบบปฏิบัติการ} -- กลไกการสร้างและความสัมพันธ์ระหว่าง Process บน Windows และ Linux
-  \item \textbf{โครงสร้างข้อมูลและอัลกอริทึม} -- การสร้างกราฟ การท่องกราฟแบบ BFS
+  \item \textbf{โครงสร้างข้อมูลและอัลกอริทึม} -- การสร้างกราฟ การท่องกราฟด้วยการหาเส้นทางสั้นที่สุด (Dijkstra)
         และการจัดลำดับด้วยคะแนนภายใต้งบประมาณ Token
   \item \textbf{ฐานข้อมูลและการจัดการข้อมูล} -- การ Parse, Normalize และจัดเก็บข้อมูลหลายรูปแบบ
   \item \textbf{วิศวกรรมซอฟต์แวร์} -- การออกแบบสถาปัตยกรรมระบบ การแบ่งโมดูล และการพัฒนา Web Application
