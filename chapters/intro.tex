@@ -109,10 +109,10 @@ Normalize Logs ให้อยู่ในรูปแบบมาตรฐา�
 
     \item เพื่อประเมินผลของการใช้ Investigation Context และ
           Retrieval-Augmented Generation (RAG) ต่อความถูกต้องของ LLM
-          ขนาดเล็กที่ทำงานภายในเครื่อง ในการระบุ Technique และ Sub-technique
+          ขนาดเล็กที่ทำงานภายในเครื่องคอมพิวเตอร์ส่วนบุคคล ในการระบุ Technique และ Sub-technique
           ตาม MITRE ATT\&CK เมื่อเทียบกับการใช้ Raw Logs
 
-    \item เพื่อลดปริมาณข้อมูล (จำนวน Token) และ Noise ที่ส่งให้ LLM โดยคง Event ที่จำเป็นต่อการวิเคราะห์ไว้
+    \item เพื่อลดปริมาณข้อมูล และ Noise ที่ส่งให้ LLM เพื่อลดจำนวน Token ที่ใช้งาน โดยคง Event ที่จำเป็นต่อการวิเคราะห์ไว้
 
     \item เพื่อพัฒนาต้นแบบ Web Dashboard สำหรับนำเสนอผลการวิเคราะห์
           ในรูปแบบรายงานการสืบสวน (Investigation Report)
@@ -160,13 +160,15 @@ Normalize Logs ให้อยู่ในรูปแบบมาตรฐา�
 
 \subsection{\ifenglish Software scope\else ขอบเขตด้านซอฟต์แวร์\fi}
 \begin{enumerate}
-    \item ใช้ชุดข้อมูลสาธารณะที่มี Ground Truth จำนวน 2 แหล่ง ได้แก่
-          Splunk Attack Data~\cite{splunk-attack-data} เฉพาะชุดที่สร้างด้วย Atomic Red Team~\cite{atomic-red-team}
-          จำนวน 38 ไฟล์ เป็นชุดข้อมูลสำหรับพัฒนา (Development Set)
-          ใช้ระบุ Event สำคัญ (Event-level Annotation) และปรับพารามิเตอร์ของ Pipeline
-          และ OTRF Security-Datasets~\cite{otrf-security-datasets} แบบ Atomic จำนวน 42 ชุด
-          เป็นชุดข้อมูลสำหรับทดสอบ (Test Set) ซึ่งใช้ประเมินผลเพียงครั้งเดียวหลังกำหนดค่าพารามิเตอร์แล้ว
-
+    \item ใช้ชุดข้อมูลสาธารณะ 2 แหล่ง ซึ่งทุกชุดเป็นชุดข้อมูลแบบ Atomic
+      คือจำลองการโจมตีเพียง 1 เทคนิคต่อ 1 สถานการณ์ (Scenario)
+      ได้แก่ Splunk Attack Data~\cite{splunk-attack-data} เฉพาะชุดที่สร้างด้วยเครื่องมือ
+      Atomic Red Team~\cite{atomic-red-team} ซึ่งรันการทดสอบทีละเทคนิค จำนวน 38 ไฟล์ Log
+      เป็นชุดข้อมูลสำหรับพัฒนา (Development Set)
+      และ OTRF Security-Datasets~\cite{otrf-security-datasets} ประเภท Atomic จำนวน 42 ชุด
+      (1 ชุดประกอบด้วย Metadata และไฟล์ Log) เป็นชุดข้อมูลสำหรับทดสอบ (Test Set)
+      โครงงานไม่ใช้ชุดข้อมูลประเภท Compound ของ OTRF ซึ่งจำลองหลายเทคนิคต่อเนื่องกันในสถานการณ์เดียว
+      
     \item ประเมินผลกับเทคนิค MITRE ATT\&CK จำนวน 24 เทคนิค ที่คัดเลือกตามเกณฑ์ที่กำหนดไว้ล่วงหน้า
           (รายละเอียดในบทที่ 3) โดยแต่ละชุดข้อมูลจำลองการโจมตีเพียงเทคนิคเดียว
           และใช้ชุดข้อมูล T1087.001 เป็นกรณีนำร่อง (Pilot) ซึ่งไม่นับรวมในผลการประเมินหลัก
@@ -215,7 +217,7 @@ Normalize Logs ให้อยู่ในรูปแบบมาตรฐา�
 
 \section{\ifenglish Expected outcomes\else ประโยชน์ที่ได้รับ\fi}
 \begin{enumerate}
-    \item ได้ Context Construction Pipeline ที่ลดปริมาณข้อมูลและจำนวน Token ที่ส่งให้ LLM
+    \item ได้ Context Construction Pipeline ที่ลดปริมาณข้อมูลและจำนวน Token ที่ LLM ใช้ในการวิเคราะห์
           โดยคง Event ที่จำเป็นต่อการวิเคราะห์ไว้
 
     \item ได้ผลการเปรียบเทียบเชิงทดลองของวิธี Event Selection และ Representation รูปแบบต่าง ๆ
@@ -270,18 +272,14 @@ Normalize Logs ให้อยู่ในรูปแบบมาตรฐา�
 
 \subsection{\ifenglish Software technology\else เทคโนโลยีด้านซอฟต์แวร์\fi}
 \begin{enumerate}
-    \item \textbf{Splunk Enterprise} -- ระบบ SIEM สำหรับรับและจัดเก็บ
-          Logs ที่ Replay จากชุดข้อมูล และเป็นแหล่งข้อมูลที่ Pipeline
-          ใช้ดึง Logs ผ่าน REST API
+%     \item \textbf{Splunk Enterprise} -- ระบบ SIEM สำหรับรับและจัดเก็บ
+%           Logs ที่ Replay จากชุดข้อมูล และเป็นแหล่งข้อมูลที่ Pipeline
+%           ใช้ดึง Logs ผ่าน REST API
 
-    \item \textbf{Docker และ Splunk Apps} -- ติดตั้ง Splunk Enterprise 9.3 ใน Docker
-          ร่วมกับ Splunk Common Information Model, Splunk Add-on for Sysmon,
-          Splunk Add-on for Microsoft Windows และ ES Content Update (ESCU)
-          สำหรับสร้าง Alert จาก Detection Rule
-
-    \item \textbf{Python} -- ภาษาหลักที่ใช้พัฒนา Pipeline
-          ได้แก่ การ Parse และ Normalize Logs, Event Selection,
-          Representation, RAG และการประเมินผล
+%     \item \textbf{Docker และ Splunk Apps} -- ติดตั้ง Splunk Enterprise 9.3 ใน Docker
+%           ร่วมกับ Splunk Common Information Model, Splunk Add-on for Sysmon,
+%           Splunk Add-on for Microsoft Windows และ ES Content Update (ESCU)
+%           สำหรับสร้าง Alert จาก Detection Rule
 
     \item \textbf{Ollama}~\cite{ollama} -- เครื่องมือสำหรับรัน
           LLM และ Embedding Model ภายในเครื่อง
@@ -292,6 +290,10 @@ Normalize Logs ให้อยู่ในรูปแบบมาตรฐา�
 
     \item \textbf{Hermes} -- เครื่องมือสำหรับจัดการ Prompt
           และการเรียกใช้งานโมเดล (Model Invocation)
+
+    \item \textbf{Python} -- ภาษาหลักที่ใช้พัฒนา Pipeline
+          ได้แก่ การ Parse และ Normalize Logs, Event Selection,
+          Representation, RAG และการประเมินผล
 
     \item \textbf{MITRE ATT\&CK Enterprise v19.2 (STIX)}
           -- ฐานความรู้เกี่ยวกับเทคนิคการโจมตีที่ใช้สร้าง
