@@ -7,6 +7,7 @@
 
 ในบทนี้จะกล่าวถึงภาพรวมของระบบ หลักการ และการออกแบบแต่ละขั้นตอนของ Context Construction Pipeline
 ตั้งแต่การรับ Alert และ Raw Logs จาก SIEM จนถึงการสร้างรายงานการสืบสวน
+รวมถึงชุดข้อมูล การสร้าง Alert และการเตรียมกรณีทดสอบที่ใช้ในการทดลอง
 โดยใช้ชุดข้อมูล Account Discovery: Local Account (T1087.001) จาก Splunk Attack Data เป็นตัวอย่างประกอบ
 
 \section{ภาพรวมของระบบ}
@@ -348,7 +349,7 @@ Event Selection ตอบคำถามว่า \emph{``จะส่งเห�
 
 \begin{table}[htbp]
   \centering
-  \caption{ข้อดีและข้อเสียของวิธ Event Selection แต่ละแบบ}
+  \caption{ข้อดีและข้อเสียของวิธี Event Selection แต่ละแบบ}
   \label{tab:es-methods}
   \begin{tabular}{|L{0.16\textwidth}|L{0.36\textwidth}|L{0.36\textwidth}|}
     \hline
@@ -376,7 +377,7 @@ Event Selection ตอบคำถามว่า \emph{``จะส่งเห�
 \subsection{วิธีที่เสนอ: Top-$k$ Relevant Events}
 จากตัวอย่าง T1087.001 เมื่อกำหนดให้ Alert ชี้ที่ Process \texttt{net.exe} (คำสั่ง \texttt{net users})
 และใช้วิธี Multiple Related เพื่อดึง Process ที่เกี่ยวข้อง (ผู้ใช้ที่รัน, Parent และ Child Process)
-พร้อม Events ที่ Process เหล่านั้นเป็นเจ้าของ จำนวน Events ลดลงจาก 11,090 เหลือ 177 events
+พร้อม Events ที่ Process เหล่านั้นเป็นเจ้าของ จำนวน Events ลดลงจาก 11,090 เหลือ 177 Events
 แต่จำนวน Events ที่ได้ยังขึ้นกับขนาดของ Process Tree และไม่มีการจัดลำดับความสำคัญ
 วิธี Top-$k$ Relevant Events จึงต่อยอดจากแนวคิดนี้โดยให้คะแนนแต่ละ Event และคัดเลือกภายใต้งบประมาณ Token
 แบ่งเป็น 4 ขั้นตอนย่อย ได้แก่ Graph, Traverse, Score และ Budget ดังหัวข้อถัดไป
@@ -406,6 +407,7 @@ Process Access (EID 10) ไม่ถูกใช้เป็นเส้นท�
 แต่จะถูกแนบเป็น Candidate ของโหนดที่เดินถึงแล้ว เพื่อให้ยังเห็นพฤติกรรมสำคัญ เช่น การเข้าถึงหน่วยความจำของ \texttt{lsass.exe}
 
 \subsection{Top-$k$ ขั้นที่ 2 -- Traverse: ท่องกราฟจากจุดที่ Alert ชี้}
+\label{sec:traverse}
 เริ่มจาก Process ที่ Alert ชี้ (Anchor) แล้วขยายไปยัง Parent และ Child Process
 โดยเก็บเฉพาะบรรพบุรุษและลูกหลานโดยตรงที่อยู่ในระยะที่กำหนด
 เพื่อให้ได้ Candidate Events ที่เกี่ยวข้องกับ Alert โดยไม่ลามไปทั้งระบบ ตามกฎดังนี้
@@ -496,6 +498,11 @@ $\Delta t$ คือเวลาที่ห่างจาก Alert (วิน�
     cmd $\rightarrow$ WMIC (EID 10) & 1 & 11 s & 0.6 & 0.2 & 0.97 & 0.12 \\ \hline
     cmd $\rightarrow$ cmd (EID 10)  & 1 & 74 s & 0.6 & 0.2 & 0.78 & 0.09 \\ \hline
   \end{tabular}
+
+  \vspace{1mm}
+  {\footnotesize หมายเหตุ: ค่า Hop ของ Events ชนิด EID 10 ในตารางนี้คำนวณด้วยวิธีนับ Hop แบบเดิม
+  ซึ่งยังไม่ได้ใช้ระยะ (Cost) ตามตารางที่~\ref{tab:graph-edges}
+  วิธีนับระยะของ EID 10 จะปรับในการทดลองขั้นต่อไป\par}
 \end{table}
 
 \subsection{Top-$k$ ขั้นที่ 4 -- Budget: คัดเลือกภายใต้งบประมาณ Token}
@@ -539,7 +546,7 @@ Representation ตอบคำถามว่า \emph{``จะนำเสน�
 \end{table}
 
 ในการทดลองปัจจุบันโครงงานเลือกใช้รูปแบบ JSON เนื่องจากได้มาโดยตรงจากขั้นตอนก่อนหน้า
-ส่วนการเปรียบเทียบ Accuracy ระหว่างรูปแบบต่าง ๆ จะดำเนินการในการทดลองขั้นต่อไป
+ส่วนการเปรียบเทียบ Accuracy ระหว่างรูปแบบต่าง ๆ จะดำเนินการในการทดลอง E2 (หัวข้อ~\ref{sec:main-exp})
 
 \section{ขั้นตอนที่ 5: Retrieval-Augmented Generation (RAG)}
 
@@ -594,7 +601,7 @@ $\rightarrow$ ระบุ Sub-technique ที่ตรงกับรูปแ
 
 \begin{figure}[htbp]
   \centering
-  \includegraphics[width=0.8\textwidth]{dashboard_prototype.png}
+  \includegraphics[width=\textwidth]{dashboard_prototype.png}
   \caption{ต้นแบบหน้า Inbox ของ Web Dashboard}
   \label{fig:dashboard}
 \end{figure}
