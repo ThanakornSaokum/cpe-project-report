@@ -256,9 +256,9 @@
       }%
       \vfill
       \ifproject%
-      %   โครงงานนี้ \\
-      %   เป็นส่วนหนึ่งของการศึกษาตามหลักสูตรปริญญาวิศวกรรมศาสตรบัณฑิต \\
-      % \else%
+        โครงงานนี้ \\
+        เป็นส่วนหนึ่งของการศึกษาตามหลักสูตรปริญญาวิศวกรรมศาสตรบัณฑิต \\
+      \else%
         รายงานนี้เป็นส่วนหนึ่งของวิชาสำรวจเพื่อโครงงาน \\
         ตามหลักสูตรปริญญาวิศวกรรมศาสตรบัณฑิต \\
       \fi
@@ -285,9 +285,9 @@
       }%
       \vfill
       \ifproject%
-      %   A Project Submitted in Partial Fulfillment of Requirements \\
-      %   for the Degree of Bachelor of Engineering \\
-      % \else%
+        A Project Submitted in Partial Fulfillment of Requirements \\
+        for the Degree of Bachelor of Engineering \\
+      \else%
         A Report Submitted in Partial Fulfillment of Project Survey Course \\
         as Required by the Degree of Bachelor of Engineering \\
       \fi
