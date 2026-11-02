@@ -4,18 +4,20 @@
 \ifenglish System Evaluation\else การประเมินระบบ\fi
 \fi}
 
-ในบทนี้นำเสนอการทดลองเบื้องต้นที่ดำเนินการแล้ว ได้แก่
-(1) การทดลองส่ง Raw Logs ให้ LLM เชิงพาณิชย์วิเคราะห์โดยตรง เพื่อยืนยันปัญหาของโครงงาน
-(2) การทดลองเพื่อตอบคำถามว่า LLM ขนาดเล็กยังจำเป็นต้องใช้ RAG หรือไม่
-และ (3) แผนการทดลองหลักและการประเมินผล
+บทนี้นำเสนอการทดลองเบื้องต้นที่ดำเนินการแล้ว 2 การทดลอง ได้แก่
+(1) การส่ง Raw Logs ให้ LLM เชิงพาณิชย์วิเคราะห์โดยตรง เพื่อยืนยันปัญหาของโครงงาน และ
+(2) การทดลองนำร่องเพื่อตรวจสอบว่า LLM ขนาดเล็กยังจำเป็นต้องใช้ RAG หรือไม่
+จากนั้นนำเสนอแผนการทดลองหลัก ตัวชี้วัด ลำดับการดำเนินการ และประเด็นที่ยังเปิดอยู่
 
 \section{การทดลองเบื้องต้น: ส่ง Raw Logs ให้ LLM วิเคราะห์โดยตรง}
 
 \subsection{วิธีการทดลอง}
-ดึง Windows Sysmon Logs ของชุดข้อมูล T1087.001 จาก Splunk ผ่าน API ได้เป็นไฟล์ JSON
+การทดลองนี้ดำเนินการก่อนการนำเสนอความก้าวหน้าครั้งที่ 1 โดยดึง Windows Sysmon Logs ของชุดข้อมูล T1087.001 จาก Splunk ผ่าน REST API
+ได้เป็นไฟล์ JSON Lines จำนวน 11,090 Events (ข้อมูลต้นฉบับในรูปแบบ XML มีขนาดประมาณ 16.8 MB)
+ซึ่งมีขนาดใหญ่กว่า Context Window ของ LLM ทั่วไป
 แล้วอัปโหลดไฟล์ให้ LLM เชิงพาณิชย์ 3 โมเดลวิเคราะห์โดยตรง
 ด้วยคำถามว่า ``นี่คือ Attack Technique อะไร เพราะอะไรถึงคิดแบบนั้น''
-คำตอบที่คาดหวังคือ Account Discovery: Local Account (T1087.001)
+คำตอบที่ถูกต้อง (Ground Truth) คือ Account Discovery: Local Account (T1087.001)
 
 \subsection{ผลการทดลอง}
 \begin{table}[ht]
@@ -24,26 +26,42 @@
   \label{tab:raw-llm}
   \begin{tabular}{|L{0.25\textwidth}|L{0.45\textwidth}|L{0.17\textwidth}|}
     \hline
-    \textbf{โมเดล} & \textbf{คำตอบ} & \textbf{ผล} \\ \hline
+    \textbf{โมเดล} & \textbf{คำตอบ} & \textbf{ผลเทียบเฉลย} \\ \hline
     GPT-5.6 Luna      & T1003 OS Credential Dumping & ผิด \\ \hline
     Gemini 3.1 Pro    & ไม่พบพฤติกรรมการโจมตีที่ชัดเจน (Logs เป็นเพียงการทำงานของ Splunk Agent) & ผิด \\ \hline
-    Claude Sonnet 5 (High) & T1087 Account Discovery & ถูกระดับ Technique \\ \hline
+    Claude Sonnet 5 (High) & T1087 Account Discovery & ถูกเฉพาะระดับ Technique (Parent Match) \\ \hline
   \end{tabular}
 \end{table}
 
 จากตารางที่~\ref{tab:raw-llm} พบว่าแม้เป็นโมเดลขนาดใหญ่ แต่เมื่อได้รับ Raw Logs ที่มี Noise จำนวนมาก
-บางโมเดลถูกดึงความสนใจไปที่ Events ที่ไม่เกี่ยวข้อง (เช่น การเข้าถึง Process ของ Splunk Agent)
-และไม่มีโมเดลใดระบุถึงระดับ Sub-technique ได้ถูกต้อง
-ผลนี้สนับสนุนสมมติฐานว่าการสร้าง Investigation Context ที่คัดกรองแล้วมีความจำเป็น
+บางโมเดลให้ความสำคัญกับ Events ที่ไม่เกี่ยวข้อง เช่น Gemini 3.1 Pro
+ที่สรุปว่า Logs เป็นเพียงการทำงานของ Splunk Agent
+และไม่มีโมเดลใดระบุ Sub-technique ได้ถูกต้อง
+ผลนี้เป็นหลักฐานเบื้องต้นที่สนับสนุนว่าการสร้าง Investigation Context ที่คัดกรองแล้วมีความจำเป็น
+ทั้งนี้ การทดลองนี้ทำผ่านหน้าเว็บของแต่ละบริการเพียงครั้งเดียว จึงควบคุมการตั้งค่าของโมเดลไม่ได้
+และใช้เพียง 1 กรณี ผลจึงใช้เป็นตัวอย่างประกอบปัญหา ไม่ใช่การเปรียบเทียบความสามารถของโมเดล
 
 \section{การทดลองนำร่อง: ความจำเป็นของ RAG สำหรับ LLM ขนาดเล็ก}
 
 \subsection{วัตถุประสงค์และการตั้งค่า}
-เพื่อทดสอบว่า เมื่อผ่าน Event Selection แล้ว LLM ขนาดเล็ก (Qwen3.5:9B) ยังต้องใช้ RAG หรือไม่
-และ Query แบบใดเหมาะกับการค้นหาในฐานความรู้
+การทดลองนี้มีวัตถุประสงค์เพื่อตรวจสอบว่า เมื่อ Input ผ่าน Event Selection แล้ว
+LLM ขนาดเล็ก (Qwen3.5:9B) ยังจำเป็นต้องใช้ RAG หรือไม่
+และ Query รูปแบบใดเหมาะกับการค้นหาในฐานความรู้ ATT\&CK
+โดยดำเนินการหลังการนำเสนอความก้าวหน้าครั้งที่ 1 และก่อนการนำเสนอครั้งที่ 2 (12--16 ตุลาคม 2569)
+
 Input ของการทดลองคือผลลัพธ์จาก Event Selection แบบ Top-$k$ ของชุดข้อมูล T1087.001
-ประกอบด้วย Alert และ 16 Events (EID 1 จำนวน 3 Events ได้แก่ \texttt{cmd.exe} $\rightarrow$ \texttt{net users}
-$\rightarrow$ \texttt{net1 users} และที่เหลือเป็น EID 10) ในรูปแบบ JSON
+ซึ่งลดจำนวน Events จาก 11,090 Events เหลือ 16 Events
+(เทียบกับวิธี Multiple Related ที่ได้ 177 Events)
+ประกอบด้วย Alert และ 16 Events ในรูปแบบ JSON ได้แก่ EID 1 จำนวน 3 Events คือ \texttt{cmd.exe},
+\texttt{net.exe} (\texttt{net users}) และ \texttt{net1.exe} (\texttt{net1 users})
+และ EID 10 จำนวน 13 Events
+ในการทดลองนำร่อง Anchor ถูกกำหนดเองที่ Event ของคำสั่ง \texttt{net users}
+ส่วนการทดลองหลักใช้ Alert ที่สร้างจาก ESCU ตามหัวข้อ~\ref{sec:alert}
+โดยแต่ละ Event ใช้ประมาณ 100--130 Tokens (หัวข้อ Budget ในบทที่ 3)
+การทดลองใช้ Embedding Model \texttt{qwen3-embedding:0.6b} และฐานความรู้ ATT\&CK v19.2 (697 Chunks)
+ตามที่อธิบายในบทที่ 3
+และตั้งค่า Temperature = 0 ปิดโหมด Thinking และ Context Window 16,384 Tokens เช่นเดียวกับการทดลองหลัก
+ทั้งนี้ $k$ ของ RAG คือจำนวนเทคนิคที่ค้นคืนมา ซึ่งเป็นคนละความหมายกับ Top-$k$ ของ Event Selection
 เงื่อนไขการทดลองแสดงในตารางที่~\ref{tab:rag-conditions}
 
 \begin{table}[ht]
@@ -54,15 +72,15 @@ $\rightarrow$ \texttt{net1 users} และที่เหลือเป็น 
     \hline
     \textbf{การทดลอง} & \textbf{RAG} & \textbf{คำอธิบาย} \\ \hline
     1. Direct-Log      & ไม่ใช้ & ส่ง Representation Log ให้ LLM โดยตรง \\ \hline
-    2. Direct-Summary  & ไม่ใช้ & ให้ LLM แปลง Log เป็นคำอธิบายพฤติกรรมภาษาคนก่อน แล้วจึงให้ระบุเทคนิค \\ \hline
+    2. Direct-Summary  & ไม่ใช้ & ให้ LLM แปลง Log เป็นคำอธิบายพฤติกรรมเป็นภาษาธรรมชาติ (ภาษาอังกฤษ) ก่อน แล้วจึงให้ระบุเทคนิค \\ \hline
     3.1 RAG-Log ($k=10$) & ใช้ & ใช้ Representation Log เป็น Query ค้นหา RAG ได้ Top-10 ให้ LLM \\ \hline
     3.2 RAG-Log ($k=5$)  & ใช้ & ใช้ Representation Log เป็น Query ค้นหา RAG ได้ Top-5 ให้ LLM \\ \hline
-    4. RAG-Summary     & ใช้ & ใช้คำอธิบายพฤติกรรมภาษาคน (จากการทดลองที่ 2) เป็น Query ค้นหา RAG ได้ Top-$k$ ให้ LLM \\ \hline
+    4. RAG-Summary ($k=10$) & ใช้ & ใช้คำอธิบายพฤติกรรม (จากการทดลองที่ 2) เป็น Query ค้นหา RAG ได้ Top-10 ให้ LLM \\ \hline
   \end{tabular}
 \end{table}
 
 \subsection{ผลการทดลอง}
-ผลการทดลองทั้ง 5 เงื่อนไข ได้แก่ อันดับของเฉลยในผลลัพธ์ของ RAG และคำตอบของ LLM แสดงในตารางที่~\ref{tab:rag-results}
+ผลการทดลองทั้ง 5 เงื่อนไข ซึ่งประกอบด้วยอันดับของเฉลยในผลการค้นคืนของ RAG และคำตอบของ LLM แสดงในตารางที่~\ref{tab:rag-results}
 
 \begin{table}[ht]
   \centering
@@ -76,7 +94,7 @@ $\rightarrow$ \texttt{net1 users} และที่เหลือเป็น 
     2. Direct-Summary    & --                & T1078 Valid Accounts                & ผิด \\ \hline
     3.1 RAG-Log ($k=10$) & อันดับ 6          & T1087.001                           & ถูก \\ \hline
     3.2 RAG-Log ($k=5$)  & ไม่อยู่ใน Top-5   & T1033 System Owner/User Discovery   & ผิด \\ \hline
-    4. RAG-Summary       & อันดับ 1          & T1087.001                           & ถูก \\ \hline
+    4. RAG-Summary ($k=10$) & อันดับ 1         & T1087.001                           & ถูก \\ \hline
   \end{tabular}
 \end{table}
 
@@ -84,19 +102,25 @@ $\rightarrow$ \texttt{net1 users} และที่เหลือเป็น 
 จากตารางที่~\ref{tab:rag-results} พบว่า
 \begin{enumerate}
   \item เมื่อไม่ใช้ RAG (การทดลองที่ 1 และ 2) LLM ขนาดเล็กตอบผิดทั้งสองกรณี
-        แม้ Input จะผ่านการคัดเลือก Event มาแล้ว แสดงว่าโมเดลขนาด 9B ยังขาดความรู้เฉพาะด้าน ATT\&CK
-        ที่จะแยกแยะเทคนิคที่ใกล้เคียงกันได้
-  \item LLM ตอบถูกเฉพาะเมื่อมี T1087.001 ซึ่งเป็นเฉลยอยู่ใน Top-$k$ ที่ได้จาก RAG
-        ดังนั้นคุณภาพของ Retrieval เป็นปัจจัยสำคัญต่อความแม่นยำ
-  \item การใช้คำอธิบายพฤติกรรมภาษาคนเป็น Query (RAG-Summary) ทำให้เฉลยขึ้นมาอยู่อันดับ 1
-        ดีกว่าการใช้ JSON โดยตรง (อันดับ 6) เนื่องจากคำอธิบายภาษาคนมีความหมายใกล้เคียงกับคำอธิบายเทคนิคในฐานความรู้มากกว่า
-  \item ค่า $k$ มีผลโดยตรง หาก $k$ น้อยเกินไปเฉลยอาจหลุดจาก Top-$k$ (การทดลอง 3.2)
+        แม้ Input จะผ่านการคัดเลือก Event มาแล้ว ชี้ว่าโมเดลขนาด 9B อาจมีความรู้ด้าน ATT\&CK
+        ไม่เพียงพอที่จะระบุเทคนิคได้ตรง โดยตอบเป็นเทคนิคอื่นที่เกี่ยวข้องกับไฟล์หรือบัญชีผู้ใช้ (T1083 และ T1078)
+  \item LLM ตอบถูกเฉพาะกรณีที่เฉลย (T1087.001) อยู่ในรายการ Top-$k$ จาก RAG
+        แม้ Prompt จะระบุว่าคำตอบที่ถูกอาจไม่อยู่ในรายการ
+        แสดงว่าในกรณีนี้ความถูกต้องของ LLM ขึ้นกับคุณภาพของการค้นคืน (Retrieval) เป็นหลัก
+  \item การใช้คำอธิบายพฤติกรรมเป็น Query (RAG-Summary) ทำให้เฉลยขึ้นมาอยู่อันดับ 1
+        ดีกว่าการใช้ JSON โดยตรง (อันดับ 6)
+        สมมติฐานคือคำอธิบายภาษาธรรมชาติมีความหมายใกล้เคียงกับคำอธิบายเทคนิคในฐานความรู้มากกว่า JSON
+        ซึ่งจะทดสอบกับกรณีจำนวนมากขึ้นในการทดลอง E3
+  \item ค่า $k$ มีผลต่อผลลัพธ์ เมื่อลด $k$ จาก 10 เป็น 5 เฉลยซึ่งอยู่อันดับ 6 หลุดออกจากรายการ
+        และ LLM ตอบผิด (การทดลองที่ 3.2)
+        อย่างไรก็ตาม $k$ ที่มากขึ้นทำให้ Prompt ยาวขึ้นประมาณ 280 Tokens ต่อเทคนิค
 \end{enumerate}
 
 \subsection{ข้อจำกัดของการทดลอง}
-การทดลองนี้ใช้เพียง 1 เทคนิคและ 1 กรณี และคำสั่ง \texttt{net users} เป็นคำสั่งที่มีลักษณะชัดเจน
-จึงยังไม่สามารถสรุปผลโดยทั่วไปได้ จำเป็นต้องทดสอบกับชุดข้อมูลที่ครอบคลุมหลายเทคนิคเพิ่มเติม
-และกำหนดเกณฑ์การประเมินไว้ล่วงหน้าก่อนดูผล
+การทดลองนี้ใช้ชุดข้อมูลเพียง 1 เทคนิค 1 กรณี และรันเงื่อนไขละ 1 ครั้ง
+อีกทั้งคำสั่ง \texttt{net users} มีลักษณะชัดเจน จึงยังไม่สามารถสรุปผลโดยทั่วไปได้
+ผลนี้ใช้เป็นแนวทางออกแบบการทดลอง E3 (หัวข้อ~\ref{sec:main-exp})
+ซึ่งทดสอบกับทุกกรณีใน Test Set และกำหนดเกณฑ์การประเมินไว้ล่วงหน้า
 
 \section{แผนการทดลองหลัก}
 \label{sec:main-exp}
@@ -108,17 +132,17 @@ $\rightarrow$ \texttt{net1 users} และที่เหลือเป็น 
 \subsection{Baseline และหลักการเปลี่ยนทีละปัจจัย}
 Baseline ของการทดลองคือ Event Selection แบบ Top-$k$ ที่งบประมาณ $B^{*}$
 นำเสนอในรูปแบบ JSON และส่งให้ LLM โดยตรงโดยไม่ใช้ RAG (Direct-Log)
-โดย $B^{*}$ คือค่า $B \in \{500, 1{,}000, 2{,}000, 4{,}000\}$ Tokens ที่ได้ความถูกต้องสูงสุดบน Development Set
+โดย $B^{*}$ คือค่า $B \in \{500, 1{,}000, 2{,}000, 4{,}000\}$ Tokens ที่ได้ Exact Match Accuracy สูงสุดบน Development Set (หากเท่ากันเลือกค่า $B$ ที่น้อยกว่า)
 ค่า $B$ สูงสุดกำหนดที่ 4,000 Tokens เพราะ Context Window ขนาด 16,384 Tokens
 ต้องเผื่อพื้นที่ให้ Prompt ผลลัพธ์จาก RAG ($k=10$ ประมาณ $10 \times 280$ Tokens) และคำตอบของโมเดล
 และการเพิ่มค่าทีละสองเท่าช่วยให้เห็นจุดที่ความถูกต้องหยุดเพิ่มขึ้น
 
 การทดลองใช้หลักเปลี่ยนทีละปัจจัยจาก Baseline (One-factor-at-a-time)
-เนื่องจากการทดลองทุกการผสม ($5 \times 5 \times 5 = 125$ รูปแบบ $\times$ 42 กรณี = 5,250 ครั้ง)
+เนื่องจากการทดลองทุกการผสม (Event Selection 5 วิธี $\times$ Representation 5 รูปแบบ $\times$ เงื่อนไขของ E3 5 แบบ $= 125$ รูปแบบ $\times$ 42 กรณี $= 5{,}250$ ครั้ง)
 ใช้เวลามากเกินกว่าที่โครงงานทำได้ ข้อจำกัดคือไม่เห็นปฏิสัมพันธ์ระหว่างปัจจัย
 
 \subsection{R0: Raw Logs}
-เพื่อตอบวัตถุประสงค์ว่า Investigation Context ดีกว่าการใช้ Raw Logs หรือไม่
+เพื่อตอบวัตถุประสงค์ข้อที่ 3 ว่า Investigation Context ทำให้ LLM ระบุเทคนิคได้ถูกต้องกว่าการใช้ Raw Logs หรือไม่
 R0 ส่ง Alert พร้อม Events ดิบทั้งหมดในช่วงเวลา $\pm T$ รอบ Alert ในรูปแบบต้นฉบับ
 โดยไม่คัดเลือก ไม่ Normalize และไม่ตัด Field ออก
 หากข้อมูลยาวเกิน Context Window จะลดค่า $T$ จนพอดีและบันทึกค่า $T$ ที่ใช้จริง
@@ -136,7 +160,7 @@ R0 ส่ง Alert พร้อม Events ดิบทั้งหมดใน�
     \hline
     \textbf{รหัส} & \textbf{วิธี} & \textbf{สิ่งที่ส่งให้ LLM} \\ \hline
     E1-1 & Alert Only & เฉพาะ Field ของ Alert \\ \hline
-    E1-2 & Single Event & Event ทั้งหมดที่ Alert ชี้ (1 Event) \\ \hline
+    E1-2 & Single Event & ทุก Field ของ Event ที่ Alert ชี้ (1 Event) \\ \hline
     E1-3 & Time Window & Events ที่ Normalize แล้วทั้งหมดในช่วง $\pm T$ \\ \hline
     E1-4 & Multiple Related & Events ในสายความสัมพันธ์ ProcessGuid (บรรพบุรุษและลูกหลาน) ไม่ให้คะแนนและไม่จำกัดงบประมาณ \\ \hline
     E1-5 ถึง E1-8 & Top-$k$ & Graph $\rightarrow$ Traverse $\rightarrow$ Score $\rightarrow$ Budget ที่ $B$ = 500, 1,000, 2,000 และ 4,000 \\ \hline
@@ -155,7 +179,7 @@ R0 ส่ง Alert พร้อม Events ดิบทั้งหมดใน�
   \small
   \begin{tabular}{|l|l|c|}
     \hline
-    \textbf{รหัส} & \textbf{รูปแบบ} & \textbf{Tokens ต่อ Event (ตัวอย่าง)} \\ \hline
+    \textbf{รหัส} & \textbf{รูปแบบ} & \textbf{Tokens ต่อ Event (ตารางที่~\ref{tab:representation})} \\ \hline
     Baseline & JSON & $\approx$ 138 \\ \hline
     E2-1 & XML & $\approx$ 195 \\ \hline
     E2-2 & TOON & $\approx$ 119 \\ \hline
@@ -169,6 +193,8 @@ R0 ส่ง Alert พร้อม Events ดิบทั้งหมดใน�
 ซึ่งขยายจากการทดลองนำร่องในหัวข้อก่อนหน้าให้ครอบคลุมทุกกรณีใน Test Set
 ย่อหน้าสรุปพฤติกรรม (Summary) สร้างครั้งเดียวต่อกรณีและใช้ร่วมกันใน E3-1 และ E3-4
 โดยนับจำนวน Token และเวลาของการสร้างย่อหน้าสรุปรวมไว้ด้วย
+เงื่อนไข RAG-Summary ทดลองเฉพาะ $k=10$ เพื่อจำกัดจำนวนรูปแบบการทดลอง
+ทั้งนี้ผลการค้นคืนชุดเดียวกันยังใช้วัด hit@5 ของ Query แบบ Summary ได้โดยไม่ต้องเรียก LLM เพิ่ม
 
 \begin{table}[ht]
   \centering
@@ -186,15 +212,14 @@ R0 ส่ง Alert พร้อม Events ดิบทั้งหมดใน�
   \end{tabular}
 \end{table}
 
-\noindent
-ค่า $k$ ของ RAG คือจำนวนเทคนิคที่ค้นคืนมา ซึ่งเป็นคนละความหมายกับ Top-$k$ ของ Event Selection
-
 \subsection{จำนวนการทดลองและค่าที่ควบคุม}
 การทดลองบน Test Set มีทั้งหมด 17 รูปแบบ (ตารางที่~\ref{tab:exp-runs})
-ค่าที่คงที่ตลอดการทดลอง ได้แก่ LLM Qwen3.5 9B ผ่าน Ollama, Temperature = 0, ปิดโหมด Thinking,
-Context Window 16,384 Tokens, Prompt ชุดเดียวกัน และฐานความรู้ ATT\&CK v19.2
+ค่าที่คงที่ตลอดการทดลอง ได้แก่ LLM Qwen3.5:9B ผ่าน Ollama, Temperature = 0, ปิดโหมด Thinking,
+Context Window 16,384 Tokens, Embedding Model \texttt{qwen3-embedding:0.6b},
+ฐานความรู้ ATT\&CK v19.2 และ Prompt แม่แบบเดียวกัน
+(เงื่อนไขที่ใช้ RAG เพิ่มเฉพาะส่วนรายการ Candidate)
 ส่วนค่าที่ปรับบน Development Set แล้วล็อกไว้ ได้แก่ $\gamma$, $\tau$, $w[\mathrm{EventID}]$,
-จำนวน Hop สูงสุด, $B^{*}$, ค่า $\pm T$ ของ Time Window และ R0 และ Prompt
+จำนวน Hop สูงสุด, $B^{*}$, ค่า $\pm T$ ของ Time Window และ R0 รวมถึง Prompt
 
 \begin{table}[ht]
   \centering
@@ -214,10 +239,15 @@ Context Window 16,384 Tokens, Prompt ชุดเดียวกัน และ
 
 \subsection{ตัวชี้วัดและการวิเคราะห์ทางสถิติ}
 ตัวชี้วัดที่ใช้ตามหัวข้อ~\ref{sec:metrics} จับคู่กับวัตถุประสงค์ของโครงงานดังตารางที่~\ref{tab:exp-metrics}
-ความถูกต้องรายงานพร้อมช่วงความเชื่อมั่น 95\% แบบ Bootstrap
+ค่าความถูกต้องจะรายงานพร้อมช่วงความเชื่อมั่น 95\% ด้วยวิธี Bootstrap
 และเปรียบเทียบแต่ละรูปแบบกับ Baseline ด้วย McNemar's Test จำนวน 16 คู่ โดยปรับค่า $p$ ด้วยวิธีของ Holm
 นอกจากนี้จะรายงานผลแยกตามเทคนิค แยกกรณีที่ใช้ Anchor สำรองออกจากกรณีที่มี Alert จริง
-และแยกตามกรณี A/B/C ของ Lineage (หัวข้อ Traverse ในบทที่ 3)
+และแยกตามกรณี A/B/C ของ Lineage (หัวข้อ~\ref{sec:traverse})
+
+คำตอบของ LLM อยู่ในรูปแบบ JSON ตามที่กำหนดใน Prompt ระบบจะดึงรหัสเทคนิคจากคำตอบมาเทียบกับเฉลย
+หาก LLM ตอบผิดรูปแบบหรือไม่ระบุรหัสเทคนิค จะนับเป็นคำตอบที่ผิด และรายงานจำนวนกรณีดังกล่าวแยกไว้
+เนื่องจากป้ายกำกับของทั้งสองแหล่งอาจสร้างขึ้นก่อน ATT\&CK v19.2 จะตรวจสอบและแปลงรหัสเทคนิค
+ที่ถูกเปลี่ยนหรือยกเลิก (Revoked/Deprecated) ให้เป็นรหัสใน v19.2 ก่อนล็อกค่าการทดลอง
 
 \begin{table}[ht]
   \centering
@@ -227,15 +257,21 @@ Context Window 16,384 Tokens, Prompt ชุดเดียวกัน และ
   \begin{tabular}{|L{0.3\textwidth}|L{0.38\textwidth}|l|}
     \hline
     \textbf{วัตถุประสงค์} & \textbf{ตัวชี้วัด} & \textbf{วัดบน} \\ \hline
-    ความถูกต้องในการระบุเทคนิค & Exact Match และ Parent Match Accuracy & Test Set \\ \hline
-    การลดปริมาณข้อมูล & Input Tokens, Latency และสัดส่วน Events ที่ถูกคัดเลือก & Test Set \\ \hline
-    การคงหลักฐานที่จำเป็น & Evidence Recall & Development Set \\ \hline
-    ประสิทธิภาพของ RAG (E3) & อันดับของเฉลยและ hit@$k$ & Test Set \\ \hline
+    ข้อ 2: เปรียบเทียบ Event Selection และ Representation & Accuracy และ Input Tokens ของ E1 และ E2 & Test Set \\ \hline
+    ข้อ 3: ความถูกต้องในการระบุเทคนิค & Exact Match และ Parent Match Accuracy & Test Set \\ \hline
+    ข้อ 3: ประสิทธิภาพของ RAG (E3) & อันดับของเฉลย, hit@5 และ hit@10 & Test Set \\ \hline
+    ข้อ 4: การลดปริมาณข้อมูลและต้นทุน & Input Tokens, Latency และสัดส่วน Events ที่ถูกคัดเลือก & Test Set \\ \hline
+    ข้อ 4: การคงหลักฐานที่จำเป็น & Evidence Recall & Development Set \\ \hline
     ข้อมูลประกอบปัญหา & จำนวน Alert ต่อไฟล์ และจำนวน TP/FP & ทั้งสองชุด \\ \hline
   \end{tabular}
 \end{table}
 
 \section{ลำดับการดำเนินการทดลอง}
+การทดลองแบ่งเป็น 5 ระยะ ดังตารางที่~\ref{tab:exp-phases}
+โดย Test Set ผ่านเพียงการเตรียมข้อมูลในระยะที่ 1
+การปรับพารามิเตอร์ในระยะที่ 2--3 ใช้เฉพาะ Development Set
+และ Test Set ถูกใช้ประเมินผลเพียงครั้งเดียวในระยะที่ 4
+
 \begin{table}[ht]
   \centering
   \caption{ลำดับการดำเนินการทดลอง}
@@ -244,9 +280,9 @@ Context Window 16,384 Tokens, Prompt ชุดเดียวกัน และ
   \begin{tabular}{|c|L{0.55\textwidth}|l|}
     \hline
     \textbf{ระยะ} & \textbf{งาน} & \textbf{ข้อมูล} \\ \hline
-    0 & การทดลองนำร่อง (เกือบเสร็จสิ้น) & T1087.001 \\ \hline
+    0 & การทดลองนำร่อง (เสร็จสิ้น) & T1087.001 \\ \hline
     1 & Freeze, Normalize, Screening, สร้าง Alert และกรณีทดสอบ & Dev + Test \\ \hline
-    2 & ระบุ Event สำคัญอัตโนมัติจาก Process Tree ของ Atomic Red Team แล้วสุ่มตรวจ & Dev \\ \hline
+    2 & สร้าง Ground Truth ระดับ Event อัตโนมัติจาก Process Tree ของ Atomic Red Team แล้วสุ่มตรวจ & Dev \\ \hline
     3 & ปรับพารามิเตอร์แล้วล็อกค่า & Dev \\ \hline
     4 & รันทั้ง 17 รูปแบบเพียงครั้งเดียว & Test \\ \hline
   \end{tabular}
@@ -255,13 +291,22 @@ Context Window 16,384 Tokens, Prompt ชุดเดียวกัน และ
 \section{ประเด็นที่ยังเปิดและข้อจำกัด}
 \begin{itemize}
   \item \textbf{การเลือก Alert เมื่อมีหลายรายการ} -- รอบนี้ใช้ 1 Alert ต่อไฟล์ การเลือกหรือจัดกลุ่ม Alert จะศึกษาต่อ
-  \item \textbf{ป้ายกำกับที่น่าสงสัยใน OTRF} -- ต้องทบทวนก่อนล็อกค่าการทดลอง
+  \item \textbf{ป้ายกำกับที่น่าสงสัยใน OTRF} -- เช่น ชุด Rubeus ASKTGT ที่ระบุเป็น T1003.003
+        และชุด MSBuild ที่ระบุเป็น T1047 (หัวข้อ~\ref{sec:dev-test}) ต้องทบทวนก่อนล็อกค่าการทดลอง
   \item \textbf{ตัวแปลง OTRF JSON เป็น Sysmon XML} -- ยังต้องพัฒนา และเป็นความเสี่ยงหลักของการสร้าง Alert ฝั่ง Test Set
-  \item \textbf{จำนวนข้อมูลเป็นค่าสูงสุด} -- ไฟล์ของ Splunk ยังต้องผ่านการคัดกรองบนเครื่องจริง
-        และชุดของ OTRF ยังต้องตรวจเทียบกับ Adversary View จำนวนกรณีจริงจึงอาจลดลง
+  \item \textbf{จำนวนกรณีทดสอบอาจลดลง} -- ชุดข้อมูล OTRF ตรวจแล้วว่ามี Sysmon Event
+        แต่ยังต้องเทียบกับคำสั่งใน Adversary View
+  \item \textbf{ขนาดของ Test Set} -- 42 กรณีทำให้ช่วงความเชื่อมั่นค่อนข้างกว้าง
+        ความแตกต่างระหว่างรูปแบบการทดลองที่มีขนาดเล็กอาจไม่มีนัยสำคัญทางสถิติ
   \item \textbf{T1059.001 (PowerShell)} -- Prompt ปัจจุบันให้ LLM ถือว่า PowerShell หรือ Command Shell
         เป็นเพียงช่องทาง (Carrier) ของเทคนิคอื่น เมื่อเฉลยคือ T1059.001 โมเดลจึงอาจตอบเป็นเทคนิคอื่นตาม Prompt
         ผลของเทคนิคนี้จะรายงานแยกไว้
+  \item \textbf{Ground Truth อยู่ในระดับชุดข้อมูล} -- ชุดข้อมูลระบุเพียงว่าไฟล์เป็นเทคนิคใด
+        ไม่ได้ระบุว่า Event ใดเป็นการโจมตี จึงวัด Evidence Recall ได้เฉพาะ Development Set
+  \item \textbf{การรั่วไหลของเฉลย} -- ในการทดลองนำร่องพบว่ารหัส Alert มีรหัสเทคนิคติดมาด้วย
+        และ Alert จาก ESCU มีชื่อ Rule และป้ายกำกับ ATT\&CK
+        จึงต้องทำ Leak Check กับทุก Prompt ก่อนส่งให้ LLM
+  \item \textbf{ต้นแบบ Web Dashboard} -- ไม่อยู่ในการประเมินเชิงปริมาณของการทดลองนี้
   \item \textbf{นอกขอบเขต (งานในอนาคต)} -- การจำแนก True Positive/False Positive,
         การประเมินบน Linux Auditd, ชุดข้อมูลแบบ Compound หรือ APT
         และชุดข้อมูลของ Splunk ที่ไม่ได้สร้างด้วย Atomic Red Team
