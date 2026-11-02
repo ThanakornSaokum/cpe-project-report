@@ -34,7 +34,56 @@ SOC Analyst คือเจ้าหน้าที่ด้านความ�
 และวิเคราะห์เหตุการณ์ด้านความปลอดภัย เพื่อระบุภัยคุกคามและสนับสนุนการตอบสนองต่อเหตุการณ์ (Incident Response)
 ซึ่งเป็นผู้มีส่วนได้ส่วนเสีย (Stakeholder) หลักของโครงงานนี้
 
-\section{แหล่งข้อมูล Security Logs}
+\section{ชุดข้อมูลและแนวคิด Scenario Dataset}
+
+\subsection{Splunk Attack Data และ Atomic Red Team}
+Splunk Attack Data~\cite{splunk-attack-data} เป็นคลังชุดข้อมูลของ Splunk Threat Research Team
+ที่บันทึก Logs จากการจำลองการโจมตีใน Lab ที่สร้างด้วยเครื่องมือ attack\_range
+แต่ละชุดมีไฟล์ YAML ระบุเทคนิค ATT\&CK ที่จำลอง แต่ไม่ได้ระบุว่า Event ใดเป็นส่วนของการโจมตี
+ชุดข้อมูลบางส่วนสร้างด้วย Atomic Red Team (ART)~\cite{atomic-red-team}
+ซึ่งเป็นคลังชุดทดสอบการโจมตีขนาดเล็กที่แยกตามเทคนิคและเขียนคำสั่งไว้ชัดเจน
+และคำสั่ง \texttt{Invoke-AtomicTest} ที่ใช้รัน หรือไฟล์จากโฟลเดอร์ \texttt{AtomicRedTeam}
+จะปรากฏใน Logs เป็นจุดเริ่มต้นของการโจมตี
+จึงสามารถระบุ Event ที่เป็นการโจมตีได้อัตโนมัติจาก Process Tree
+โครงงานจึงใช้ชุดข้อมูล ART ของ Splunk เป็นชุดข้อมูลสำหรับพัฒนา (Development Set)
+
+\subsection{OTRF Security-Datasets}
+OTRF Security-Datasets~\cite{otrf-security-datasets} (เดิมชื่อ Mordor) เป็นชุดข้อมูลสาธารณะของ Open Threat Research Forge
+ที่บันทึก Logs จากการจำลองการโจมตีใน Lab ของตนเอง โดยใช้เครื่องมืออย่าง Empire และ Covenant
+แบ่งเป็นชุดแบบ Atomic (จำลองพฤติกรรมเดียว) และ Compound (จำลองทั้ง Campaign ที่มีหลายเทคนิค)
+และมี Metadata ส่วน Adversary View ที่บันทึกคำสั่งที่ผู้โจมตีใช้จริง
+เนื่องจากมาจาก Lab และเครื่องมือที่ต่างจาก Splunk จึงใช้เป็นชุดข้อมูลสำหรับทดสอบ (Test Set)
+เพื่อตรวจสอบว่าค่าที่ปรับบนข้อมูลของ Splunk ใช้กับข้อมูลจากแหล่งอื่นได้หรือไม่
+โครงงานใช้เฉพาะชุดข้อมูลประเภท Atomic เนื่องจากแต่ละชุดมีเทคนิคที่เป็นเฉลยเพียงเทคนิคเดียว
+ส่วนชุดประเภท Compound มีหลายเทคนิคปนกันในสถานการณ์เดียว จึงไม่สามารถใช้เป็น Ground Truth ระดับ Scenario ได้
+
+\subsection{นิยามที่ใช้ในโครงงาน}
+\begin{itemize}
+  \item \textbf{Attack Scenario} -- การจำลองการโจมตีหนึ่งสถานการณ์ในสภาพแวดล้อมการทดลอง
+  \item \textbf{Scenario Dataset} -- ชุดของ Events ที่เกิดขึ้นในบริบทของ Attack Scenario หนึ่ง
+  \item \textbf{Atomic Dataset} -- Scenario Dataset ที่จำลองการโจมตีเพียง 1 เทคนิค
+      (1 Scenario = 1 เทคนิค) ตรงข้ามกับแบบ Compound ที่จำลองหลายเทคนิคต่อเนื่องกัน
+  \item \textbf{Event / Log Event} -- บันทึกหนึ่ง Record ของกิจกรรม เช่น Process Creation หรือ Network Connection
+  \item \textbf{Ground Truth} -- เทคนิค ATT\&CK ที่ใช้สร้าง Scenario นั้น
+        เป็น Ground Truth ระดับ Scenario/Dataset ไม่ใช่ Label ของทุก Event
+        (1 Scenario Dataset $\rightarrow$ 1 Ground-truth Technique $\rightarrow$ หลาย Events)
+  \item \textbf{Ground Truth ระดับ Event} -- รายการ Events ที่เป็นส่วนของการโจมตีจริง
+        มีเฉพาะใน Development Set ใช้ปรับพารามิเตอร์และวัดสัดส่วนหลักฐานที่ถูกคัดเลือก
+  \item \textbf{Case (กรณีการสืบสวน)} -- หน่วยของการทดลอง ประกอบด้วย 1 Alert และ Logs ของไฟล์นั้น
+  \item \textbf{Anchor} -- Event ที่ Alert ชี้ เป็นจุดเริ่มต้นของ Event Selection
+        หากไฟล์ไม่มี Alert จะใช้ Event ของคำสั่งโจมตีเป็น Anchor สำรอง
+  \item \textbf{Development Set / Test Set} -- ชุดข้อมูลสำหรับปรับพารามิเตอร์ (ใช้ได้หลายครั้ง)
+        และชุดข้อมูลสำหรับวัดผล (ใช้ครั้งเดียวหลังล็อกค่า)
+  \item \textbf{Freeze} -- การล็อกค่าพารามิเตอร์ Prompt เวอร์ชันของชุดข้อมูล และ Checksum ก่อนทดสอบ
+  \item \textbf{Leak Check} -- การตรวจสอบว่า Prompt ไม่มีเฉลยหลุดเข้าไป เช่น รหัสเทคนิค หรือชื่อ Detection Rule
+  \item \textbf{Noise} -- เหตุการณ์ใน Logs ที่ไม่เกี่ยวข้องกับการวิเคราะห์ รวมถึง Field และ Event ที่ไม่จำเป็น
+  \item \textbf{Investigation Context} -- ชุดเหตุการณ์และความรู้ที่เกี่ยวข้องกับเหตุการณ์ที่น่าสงสัย
+        ซึ่งถูกจัดเตรียมเพื่อให้ LLM ใช้เหตุผลกับเหตุการณ์นั้น
+\end{itemize}
+
+\section{ประเภท Logs ในชุดข้อมูล}
+Logs ในชุดข้อมูลทั้งสองแหล่งถูกบันทึกจากเครื่องในสภาพแวดล้อมจำลองของผู้จัดทำชุดข้อมูล
+โดยใช้เครื่องมือบันทึกเหตุการณ์ของระบบปฏิบัติการ ดังนี้
 
 \subsection{Windows Sysmon}
 System Monitor (Sysmon)~\cite{sysmon} เป็นบริการของ Microsoft Sysinternals
@@ -89,49 +138,6 @@ ATT\&CK Enterprise เวอร์ชัน 19.2 ที่ใช้ในโค�
 และ 475 Sub-techniques (ไม่นับรายการที่ถูกยกเลิก) และมีการปรับปรุงเวอร์ชันประมาณปีละ 2 ครั้ง
 ในโครงงานนี้ ATT\&CK ถูกใช้ใน 2 บทบาท คือ (1) เป็นป้ายกำกับ (Label) ของ Ground Truth สำหรับประเมินผล
 และ (2) เป็นฐานความรู้ (Knowledge Base) ให้ LLM อ้างอิงผ่าน RAG
-
-\section{ชุดข้อมูลและแนวคิด Scenario Dataset}
-
-\subsection{Splunk Attack Data และ Atomic Red Team}
-Splunk Attack Data~\cite{splunk-attack-data} เป็นคลังชุดข้อมูลของ Splunk Threat Research Team
-ที่บันทึก Logs จากการจำลองการโจมตีใน Lab ที่สร้างด้วยเครื่องมือ attack\_range
-แต่ละชุดมีไฟล์ YAML ระบุเทคนิค ATT\&CK ที่จำลอง แต่ไม่ได้ระบุว่า Event ใดเป็นส่วนของการโจมตี
-ชุดข้อมูลบางส่วนสร้างด้วย Atomic Red Team (ART)~\cite{atomic-red-team}
-ซึ่งเป็นคลังชุดทดสอบการโจมตีขนาดเล็กที่แยกตามเทคนิคและเขียนคำสั่งไว้ชัดเจน
-และคำสั่ง \texttt{Invoke-AtomicTest} ที่ใช้รัน หรือไฟล์จากโฟลเดอร์ \texttt{AtomicRedTeam}
-จะปรากฏใน Logs เป็นจุดเริ่มต้นของการโจมตี
-จึงสามารถระบุ Event ที่เป็นการโจมตีได้อัตโนมัติจาก Process Tree
-โครงงานจึงใช้ชุดข้อมูล ART ของ Splunk เป็นชุดข้อมูลสำหรับพัฒนา (Development Set)
-
-\subsection{OTRF Security-Datasets}
-OTRF Security-Datasets~\cite{otrf-security-datasets} (เดิมชื่อ Mordor) เป็นชุดข้อมูลสาธารณะของ Open Threat Research Forge
-ที่บันทึก Logs จากการจำลองการโจมตีใน Lab ของตนเอง โดยใช้เครื่องมืออย่าง Empire และ Covenant
-แบ่งเป็นชุดแบบ Atomic (จำลองพฤติกรรมเดียว) และ Compound (จำลองทั้ง Campaign ที่มีหลายเทคนิค)
-และมี Metadata ส่วน Adversary View ที่บันทึกคำสั่งที่ผู้โจมตีใช้จริง
-เนื่องจากมาจาก Lab และเครื่องมือที่ต่างจาก Splunk จึงใช้เป็นชุดข้อมูลสำหรับทดสอบ (Test Set)
-เพื่อตรวจสอบว่าค่าที่ปรับบนข้อมูลของ Splunk ใช้กับข้อมูลจากแหล่งอื่นได้หรือไม่
-
-\subsection{นิยามที่ใช้ในโครงงาน}
-\begin{itemize}
-  \item \textbf{Attack Scenario} -- การจำลองการโจมตีหนึ่งสถานการณ์ในสภาพแวดล้อมการทดลอง
-  \item \textbf{Scenario Dataset} -- ชุดของ Events ที่เกิดขึ้นในบริบทของ Attack Scenario หนึ่ง
-  \item \textbf{Event / Log Event} -- บันทึกหนึ่ง Record ของกิจกรรม เช่น Process Creation หรือ Network Connection
-  \item \textbf{Ground Truth} -- เทคนิค ATT\&CK ที่ใช้สร้าง Scenario นั้น
-        เป็น Ground Truth ระดับ Scenario/Dataset ไม่ใช่ Label ของทุก Event
-        (1 Scenario Dataset $\rightarrow$ 1 Ground-truth Technique $\rightarrow$ หลาย Events)
-  \item \textbf{Ground Truth ระดับ Event} -- รายการ Events ที่เป็นส่วนของการโจมตีจริง
-        มีเฉพาะใน Development Set ใช้ปรับพารามิเตอร์และวัดสัดส่วนหลักฐานที่ถูกคัดเลือก
-  \item \textbf{Case (กรณีการสืบสวน)} -- หน่วยของการทดลอง ประกอบด้วย 1 Alert และ Logs ของไฟล์นั้น
-  \item \textbf{Anchor} -- Event ที่ Alert ชี้ เป็นจุดเริ่มต้นของ Event Selection
-        หากไฟล์ไม่มี Alert จะใช้ Event ของคำสั่งโจมตีเป็น Anchor สำรอง
-  \item \textbf{Development Set / Test Set} -- ชุดข้อมูลสำหรับปรับพารามิเตอร์ (ใช้ได้หลายครั้ง)
-        และชุดข้อมูลสำหรับวัดผล (ใช้ครั้งเดียวหลังล็อกค่า)
-  \item \textbf{Freeze} -- การล็อกค่าพารามิเตอร์ Prompt เวอร์ชันของชุดข้อมูล และ Checksum ก่อนทดสอบ
-  \item \textbf{Leak Check} -- การตรวจสอบว่า Prompt ไม่มีเฉลยหลุดเข้าไป เช่น รหัสเทคนิค หรือชื่อ Detection Rule
-  \item \textbf{Noise} -- เหตุการณ์ใน Logs ที่ไม่เกี่ยวข้องกับการวิเคราะห์ รวมถึง Field และ Event ที่ไม่จำเป็น
-  \item \textbf{Investigation Context} -- ชุดเหตุการณ์และความรู้ที่เกี่ยวข้องกับเหตุการณ์ที่น่าสงสัย
-        ซึ่งถูกจัดเตรียมเพื่อให้ LLM ใช้เหตุผลกับเหตุการณ์นั้น
-\end{itemize}
 
 \section{Large Language Model (LLM)}
 LLM คือโมเดลภาษาที่สร้างจากสถาปัตยกรรม Transformer~\cite{vaswani2017attention}
