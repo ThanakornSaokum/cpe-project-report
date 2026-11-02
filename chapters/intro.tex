@@ -45,13 +45,13 @@ Security Logs จากแหล่งข้อมูลต่าง ๆ ภา�
 
 ตัวอย่างเช่น ชุดข้อมูลจำลองการโจมตีแบบ Account Discovery: Local Account
 (T1087.001) จาก Splunk Attack Data~\cite{splunk-attack-data}
-ประกอบด้วย Windows Sysmon Logs จำนวน 11,090 events ภายในเวลาประมาณ
+ประกอบด้วย Windows Sysmon Logs จำนวน 11,090 Events ภายในเวลาประมาณ
 15 นาที และมีขนาดไฟล์ XML ประมาณ 16.8 MB
 
 แม้ Alert จาก SIEM หรือ Endpoint Detection and Response (EDR) 
 จะช่วยระบุ Event ที่ควรตรวจสอบ แต่การทำความเข้าใจเหตุการณ์ยังจำเป็นต้องอาศัย
-Logs อื่นที่มีความสัมพันธ์กัน เช่น Process ต้นทางและ Process ที่เกิดขึ้น
-ต่อเนื่องกัน เพื่อเชื่อมโยงพฤติกรรมและระบุเทคนิคการโจมตีตาม MITRE
+Logs อื่นที่มีความสัมพันธ์กัน เช่น Process ต้นทางและ Process ที่เกิดขึ้นต่อเนื่องกัน
+เพื่อเชื่อมโยงพฤติกรรมและระบุเทคนิคการโจมตีตาม MITRE
 ATT\&CK~\cite{mitre-attack} ซึ่งต้องอาศัยเวลาและความเชี่ยวชาญของ
 SOC Analyst
 
@@ -59,13 +59,14 @@ SOC Analyst
 Logs เป็นอีกแนวทางหนึ่ง แต่การส่ง Raw Logs ให้ LLM โดยตรงมีข้อจำกัด
 ทั้งด้านปริมาณ Token ที่สูง และ Noise จาก Event หรือ Field ที่ไม่เกี่ยวข้อง
 ซึ่งอาจส่งผลต่อการวิเคราะห์ นอกจากนี้ การส่ง Security Logs ไปประมวลผล
-ผ่านบริการ LLM ภายนอกยังอาจมีข้อจำกัดด้านความเป็นส่วนตัวและนโยบาย
-การจัดการข้อมูลขององค์กร
+ผ่านบริการ LLM ภายนอกยังอาจมีข้อจำกัดด้านความเป็นส่วนตัว
+และนโยบายการจัดการข้อมูลขององค์กร
 
 จากการทดลองเบื้องต้นของคณะผู้จัดทำ โดยส่ง Raw Logs จากชุดข้อมูล
 T1087.001 ที่ดึงผ่าน Splunk API ให้ LLM วิเคราะห์โดยตรง พบว่าโมเดลบางตัวระบุเทคนิคการโจมตีไม่ถูกต้อง
 บางตัวระบุได้เพียงระดับ Technique แต่ไม่สามารถระบุ Sub-technique ได้ถูกต้อง
 และบางตัวไม่สามารถสรุปได้ว่าพบพฤติกรรมการโจมตีหรือไม่
+(ตารางที่~\ref{tab:raw-llm})
 
 ด้วยเหตุนี้ โครงงานจึงมุ่งออกแบบและประเมิน
 \textbf{Context Construction Pipeline} เพื่อสร้าง
@@ -73,12 +74,12 @@ T1087.001 ที่ดึงผ่าน Splunk API ให้ LLM วิเค�
 Alert สำหรับใช้ประกอบการวิเคราะห์ของ LLM โดยประกอบด้วยการ 
 Normalize Logs ให้อยู่ในรูปแบบมาตรฐาน การคัดเลือก Event ที่เกี่ยวข้อง
 (Event Selection) และการแปลงข้อมูลให้อยู่ในรูปแบบที่เหมาะสม
-(Representation) รวมถึงการใช้ Retrieval-Augmented Generation (RAG)
-~\cite{lewis2020rag} เพื่อค้นคืนองค์ความรู้จาก MITRE ATT\&CK
+(Representation) รวมถึงการใช้ Retrieval-Augmented Generation (RAG)~\cite{lewis2020rag}
+เพื่อค้นคืนองค์ความรู้จาก MITRE ATT\&CK
 มาเสริมการวิเคราะห์
 
-โครงงานนี้มุ่งประเมินผลของการสร้าง Investigation Context ทั้งในด้าน
-การลดปริมาณข้อมูลและการช่วยให้ LLM ระบุ MITRE ATT\&CK Technique
+โครงงานนี้มุ่งประเมินผลของการสร้าง Investigation Context 
+ทั้งในด้านการลดปริมาณข้อมูลและการช่วยให้ LLM ระบุ MITRE ATT\&CK Technique
 และ Sub-technique ได้ถูกต้องมากขึ้น รวมถึงศึกษาการใช้ Local LLM
 เพื่อประมวลผลข้อมูลภายในเครื่อง ลดความจำเป็นในการส่ง Security Logs
 ไปยังบริการภายนอก
@@ -177,7 +178,7 @@ Normalize Logs ให้อยู่ในรูปแบบมาตรฐา�
     \item กำหนดหน่วยการวิเคราะห์เป็น 1 Alert ต่อ 1 กรณีการสืบสวน (Alert-centric)
           โดย Alert สร้างจาก Detection Rule ทางการของ Splunk (ES Content Update: ESCU)~\cite{splunk-escu}
           เมื่อ Replay Logs เข้า Splunk Enterprise และใช้ Alert ที่เป็นการโจมตีจริง (True Positive) 1 รายการต่อไฟล์
-          หากไฟล์ใดไม่มี Alert จะใช้ Event การสร้าง Process ของคำสั่งโจมตีเป็นจุดเริ่มต้นแทน
+          หากไฟล์ใดไม่มี Alert จะใช้ Event ของคำสั่งโจมตีเป็นจุดเริ่มต้นแทน
           โครงงานนี้ไม่ได้พัฒนาระบบตรวจจับภัยคุกคามขึ้นมาแทน SIEM/EDR
 
     \item ใช้ LLM รุ่นเดียวกันตลอดการทดลอง คือ Qwen3.5 9B
@@ -287,7 +288,7 @@ Normalize Logs ให้อยู่ในรูปแบบมาตรฐา�
 
     \item \textbf{Qwen3.5:9B} -- LLM ที่ใช้วิเคราะห์ Investigation Context
 
-    \item \textbf{Qwen3-embedding:0.6b} -- Embedding Model สำหรับแปลงฐานความรู้และ Query เป็นเวกเตอร์ใน RAG
+    \item \textbf{qwen3-embedding:0.6b} -- Embedding Model สำหรับแปลงฐานความรู้และ Query เป็นเวกเตอร์ใน RAG
 
     \item \textbf{Hermes} -- เครื่องมือสำหรับจัดการ Prompt
           และการเรียกใช้งานโมเดล (Model Invocation)
