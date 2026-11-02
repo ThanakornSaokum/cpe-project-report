@@ -1,0 +1,69 @@
+\documentclass[semifinal,survey]{cpecmu}
+%% หมายเหตุ: ตัวเลือก semifinal จะแสดงแถบดำตรงบรรทัดที่ล้นขอบ (overfull hbox)
+%% เมื่อพร้อมส่งฉบับจริง ให้เปลี่ยนเป็น \documentclass[final]{cpecmu}
+
+%% TODO: ใส่เลขที่โครงงานที่ภาควิชากำหนดให้ (ตอนนี้ยังไม่ทราบ)
+\projectNo{S007-1}
+%% ปีการศึกษา (ค.ศ.) ระบบจะแปลงเป็น พ.ศ. ให้อัตโนมัติ: 2026 -> 2569
+\acadyear{2026}
+
+\titleTH{การใช้โมเดลภาษาขนาดใหญ่วิเคราะห์บันทึกเหตุการณ์จากระบบบริหารจัดการข้อมูลและเหตุการณ์ด้านความปลอดภัย}
+\titleEN{Using LLM to Analyze SIEM Logs}
+
+%% TODO: ตรวจสอบคำนำหน้าชื่อและการสะกดชื่อภาษาอังกฤษให้ตรงกับทะเบียน
+\author{นายธนกร เสาคำ}{Thanakon Saokham}{660610761}
+\author{นางสาวนพรดา กฤษวัฒนานนท์}{Nopparada Kritwattananont}{660610766}
+\author{นายบูรณิน บุณโยประการ}{Buranin Boonyoprakan}{660610770}
+
+%% อาจารย์ที่ปรึกษาและกรรมการ (ชื่อดึงมาจาก cpecmu-faculty.sty)
+\cpeadvisor{yuthapong}   % ผศ.ดร.ยุทธพงษ์ สมจิต
+\cpecommittee{trasapong} % รศ.ดร.ตรัสพงศ์ ไทยอุปถัมภ์
+\cpecommittee{sasin}     % ผศ.ดร.ศศิน จันทร์พวงทอง
+\cpecommittee{karn}      % ผศ.ดร.กานต์ ปทานุคม
+
+%% Packages
+\usepackage[final]{graphicx} % for including graphics
+\graphicspath{{figures/}}
+\usepackage{amsmath}
+\usepackage{array}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,backgrounds}
+
+%% Add bookmarks and hyperlinks in the document.
+\PassOptionsToPackage{hyphens}{url}
+\usepackage[colorlinks=true,allcolors=Blue4,citecolor=red,linktoc=all]{hyperref}
+\def\UrlLeft#1\UrlRight{$#1$}
+
+\usepackage{afterpage}
+\usepackage{pdflscape}
+
+%% ช่วยลดปัญหาบรรทัดล้นขอบ (overfull hbox) จากการตัดคำภาษาไทย
+\setlength{\emergencystretch}{3em}
+
+\bibliographystyle{plain}
+
+\begin{document}
+\include{chapters/frontmatter}
+
+\pagestyle{empty}\cleardoublepage
+\normalspacing \setcounter{page}{1} \pagenumbering{arabic} \pagestyle{cpecmu}
+
+\include{chapters/intro}
+\include{chapters/background}
+\include{chapters/approach}
+\include{chapters/eval}
+\ifproject
+\include{chapters/conclusion}
+\fi
+
+\bibliography{myReport}
+
+%% ภาคผนวก / ประวัติผู้เขียน (biosketch) ยังไม่ใช้ในรายงาน 261491
+%% หากต้องการใช้ ให้นำ comment ออก
+% \ifproject
+% \normalspacing
+% \appendix
+% \include{chapters/appendix}
+% \fi
+\end{document}

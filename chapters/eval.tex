@@ -114,7 +114,7 @@ Baseline ของการทดลองคือ Event Selection แบบ To
 และการเพิ่มค่าทีละสองเท่าช่วยให้เห็นจุดที่ความถูกต้องหยุดเพิ่มขึ้น
 
 การทดลองใช้หลักเปลี่ยนทีละปัจจัยจาก Baseline (One-factor-at-a-time)
-เนื่องจากการทดลองทุกการผสม ($5 \times 5 \times 5 = 125$ รูปแบบ $\times$ 40 กรณี = 5,000 ครั้ง)
+เนื่องจากการทดลองทุกการผสม ($5 \times 5 \times 5 = 125$ รูปแบบ $\times$ 42 กรณี = 5,250 ครั้ง)
 ใช้เวลามากเกินกว่าที่โครงงานทำได้ ข้อจำกัดคือไม่เห็นปฏิสัมพันธ์ระหว่างปัจจัย
 
 \subsection{R0: Raw Logs}
@@ -203,12 +203,12 @@ Context Window 16,384 Tokens, Prompt ชุดเดียวกัน และ
   \small
   \begin{tabular}{|l|c|c|}
     \hline
-    \textbf{ชุดการทดลอง} & \textbf{จำนวนรูปแบบ} & \textbf{จำนวนครั้ง (40 กรณี)} \\ \hline
-    R0 & 1 & 40 \\ \hline
-    E1 (รวม Baseline) & 8 & 320 \\ \hline
-    E2 & 4 & 160 \\ \hline
-    E3 & 4 & 160 \\ \hline
-    \textbf{รวม} & \textbf{17} & \textbf{680 (+ 40 ครั้งสำหรับสร้างย่อหน้าสรุป)} \\ \hline
+    \textbf{ชุดการทดลอง} & \textbf{จำนวนรูปแบบ} & \textbf{จำนวนครั้ง (42 กรณี)} \\ \hline
+    R0 & 1 & 42 \\ \hline
+    E1 (รวม Baseline) & 8 & 336 \\ \hline
+    E2 & 4 & 168 \\ \hline
+    E3 & 4 & 168 \\ \hline
+    \textbf{รวม} & \textbf{17} & \textbf{714 (+ 42 ครั้งสำหรับสร้างย่อหน้าสรุป)} \\ \hline
   \end{tabular}
 \end{table}
 
@@ -216,7 +216,8 @@ Context Window 16,384 Tokens, Prompt ชุดเดียวกัน และ
 ตัวชี้วัดที่ใช้ตามหัวข้อ~\ref{sec:metrics} จับคู่กับวัตถุประสงค์ของโครงงานดังตารางที่~\ref{tab:exp-metrics}
 ความถูกต้องรายงานพร้อมช่วงความเชื่อมั่น 95\% แบบ Bootstrap
 และเปรียบเทียบแต่ละรูปแบบกับ Baseline ด้วย McNemar's Test จำนวน 16 คู่ โดยปรับค่า $p$ ด้วยวิธีของ Holm
-นอกจากนี้จะรายงานผลแยกตามเทคนิค และแยกกรณีที่ใช้ Anchor สำรองออกจากกรณีที่มี Alert จริง
+นอกจากนี้จะรายงานผลแยกตามเทคนิค แยกกรณีที่ใช้ Anchor สำรองออกจากกรณีที่มี Alert จริง
+และแยกตามกรณี A/B/C ของ Lineage (หัวข้อ Traverse ในบทที่ 3)
 
 \begin{table}[ht]
   \centering
@@ -258,6 +259,9 @@ Context Window 16,384 Tokens, Prompt ชุดเดียวกัน และ
   \item \textbf{ตัวแปลง OTRF JSON เป็น Sysmon XML} -- ยังต้องพัฒนา และเป็นความเสี่ยงหลักของการสร้าง Alert ฝั่ง Test Set
   \item \textbf{จำนวนข้อมูลเป็นค่าสูงสุด} -- ไฟล์ของ Splunk ยังต้องผ่านการคัดกรองบนเครื่องจริง
         และชุดของ OTRF ยังต้องตรวจเทียบกับ Adversary View จำนวนกรณีจริงจึงอาจลดลง
+  \item \textbf{T1059.001 (PowerShell)} -- Prompt ปัจจุบันให้ LLM ถือว่า PowerShell หรือ Command Shell
+        เป็นเพียงช่องทาง (Carrier) ของเทคนิคอื่น เมื่อเฉลยคือ T1059.001 โมเดลจึงอาจตอบเป็นเทคนิคอื่นตาม Prompt
+        ผลของเทคนิคนี้จะรายงานแยกไว้
   \item \textbf{นอกขอบเขต (งานในอนาคต)} -- การจำแนก True Positive/False Positive,
         การประเมินบน Linux Auditd, ชุดข้อมูลแบบ Compound หรือ APT
         และชุดข้อมูลของ Splunk ที่ไม่ได้สร้างด้วย Atomic Red Team

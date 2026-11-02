@@ -1,0 +1,55 @@
+\chapter{\ifenglish Conclusions and Discussions\else บทสรุปและข้อเสนอแนะ\fi}
+
+\section{\ifenglish Conclusions\else สรุปผล\fi}
+
+โครงงานนี้ออกแบบ Context Construction Pipeline สำหรับสร้าง Investigation Context จาก Security Logs ในระบบ SIEM
+ก่อนส่งให้ LLM วิเคราะห์ ประกอบด้วยขั้นตอน Normalize, Event Selection และ Representation
+ร่วมกับการเสริมความรู้จาก MITRE ATT\&CK ด้วย RAG และนำเสนอผลเป็น Investigation Report ผ่าน Web Dashboard
+
+ณ ปัจจุบัน คณะผู้จัดทำได้ติดตั้ง Splunk Enterprise และป้อนข้อมูลจำลองแล้ว
+พัฒนาการดึง Logs ผ่าน API การ Normalize และวิธี Event Selection แบบ Top-$k$ ที่ใช้กราฟความสัมพันธ์ของ Process
+ซึ่งลดจำนวน Events ของชุดข้อมูล T1087.001 จาก 11,090 Events เหลือ 16 Events ที่เกี่ยวข้องกับ Alert
+รวมถึงสร้างฐานความรู้ ATT\&CK v19.2 จำนวน 697 Chunks และต้นแบบ Web Dashboard
+ผลการทดลองเบื้องต้นแสดงว่า LLM ขนาดเล็ก (Qwen3.5:9B) ระบุเทคนิคได้ถูกต้องเฉพาะเมื่อมี RAG
+และเฉลยอยู่ใน Top-$k$ โดยการใช้คำอธิบายพฤติกรรมภาษาคนเป็น Query ให้ผลการค้นหาดีที่สุด
+
+ข้อจำกัดของระบบในปัจจุบัน ได้แก่
+(1) การทดลองยังครอบคลุมเพียง 1 เทคนิค จึงยังสรุปผลโดยทั่วไปไม่ได้
+(2) พารามิเตอร์ของการให้คะแนน ($\gamma$, $w[\mathrm{EventID}]$, $\tau$) ยังเป็นค่าตั้งต้นที่ยังไม่ได้ปรับจูน
+(3) วิธีที่อาศัยความสัมพันธ์ของ Process อาจพลาดพฤติกรรมที่ไม่ได้เชื่อมกันทาง Process โดยตรง
+(4) การ Normalize ให้ครบตามมาตรฐาน CIM และการรองรับ Linux Auditd ยังอยู่ระหว่างพัฒนา
+และ (5) ระบบพึ่งพา Alert จาก SIEM/EDR เป็นจุดเริ่มต้น หากไม่มี Alert ระบบจะไม่เริ่มการสืบสวน
+
+\section{\ifenglish Challenges\else ปัญหาที่พบและแนวทางการแก้ไข\fi}
+
+ในการทำโครงงานนี้ พบว่าเกิดปัญหาหลัก ๆ ดังนี้
+\begin{enumerate}
+  \item \textbf{Ground Truth อยู่ในระดับชุดข้อมูล ไม่ใช่ระดับ Event} --
+        ชุดข้อมูล Splunk ระบุเพียงว่าไฟล์เป็นเทคนิคใด แต่ไม่ระบุว่า Event ใดเป็นการโจมตี
+        แนวทางแก้ไขคือนิยาม Scenario Dataset ให้ชัดเจน (1 Scenario Dataset มี 1 Ground-truth Technique)
+        ใช้ Label เพื่อประเมินผลเท่านั้น และใช้ OTRF ที่มี Adversary View เป็นข้อมูลอ้างอิงเพิ่มเติม
+  \item \textbf{การรั่วไหลของเฉลยในข้อมูล} -- พบว่ารหัส Alert บางรายการมีรหัสเทคนิคติดมาด้วย
+        จึงเพิ่มขั้นตอนตรวจสอบและแทนที่ข้อมูลที่บอกคำตอบก่อนส่งให้ LLM
+  \item \textbf{การเลือกค่าพารามิเตอร์ของ Event Selection} -- ไม่มีค่าที่ถูกต้องสากล
+        จึงออกแบบให้ปรับค่าได้ผ่านไฟล์ตั้งค่า และจะปรับจูนด้วย Development Set ก่อนทดสอบกับ Test Set
+  \item \textbf{ความสามารถจำกัดของ LLM ขนาดเล็ก} -- โมเดล 9B ไม่สามารถระบุ Sub-technique ได้ด้วยตนเอง
+        แนวทางแก้ไขคือเสริมความรู้ด้วย RAG และปรับ Query ให้เป็นภาษาคน
+\end{enumerate}
+
+\section{\ifenglish%
+Suggestions and further improvements
+\else%
+ข้อเสนอแนะและแนวทางการพัฒนาต่อ
+\fi
+}
+
+ข้อเสนอแนะเพื่อพัฒนาโครงงานนี้ต่อไป มีดังนี้
+\begin{enumerate}
+  \item ขยายการทดลองให้ครอบคลุมหลายเทคนิคและหลาย Tactic ทั้งจาก Windows Sysmon และ Linux Auditd
+  \item เปรียบเทียบวิธี Event Selection และ Representation ทุกแบบอย่างเป็นระบบ และปรับจูนพารามิเตอร์ของการให้คะแนน
+  \item นิยามชนิดของโหนดและเส้นเชื่อมพร้อมน้ำหนักในกราฟความสัมพันธ์ของ Event ให้ชัดเจน
+        และพิจารณาใช้ Graph Neural Network (GNN) ในการประมวลผลกราฟ
+  \item เชื่อมต่อ Pipeline เข้ากับ Web Dashboard และ Splunk แบบอัตโนมัติ และทดสอบการทำงานแบบหลายผู้ใช้
+  \item กำหนดรอบการปรับปรุงฐานความรู้ตามรอบการออกเวอร์ชันของ MITRE ATT\&CK
+        โดยให้ผู้ดูแลระบบเป็นผู้สั่งปรับปรุง
+\end{enumerate}

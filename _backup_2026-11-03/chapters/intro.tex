@@ -1,0 +1,441 @@
+\chapter{\ifenglish Introduction\else บทนำ\fi}
+
+% \section{\ifenglish Project rationale\else ที่มาของโครงงาน\fi}
+
+% ระบบ Security Information and Event Management (SIEM) ทำหน้าที่รวบรวม Security Logs
+% จากแหล่งข้อมูลจำนวนมากในองค์กร เช่น เครื่องลูกข่าย เซิร์ฟเวอร์ และอุปกรณ์เครือข่าย
+% แล้วนำมาจัดเก็บ ค้นหา และสร้างการแจ้งเตือน (Alert) เมื่อพบพฤติกรรมที่น่าสงสัย
+% อย่างไรก็ดี ปริมาณและความหลากหลายของ Logs ทำให้การสืบสวนเหตุการณ์ทำได้ยาก
+% ตัวอย่างเช่น ชุดข้อมูลจำลองการโจมตีแบบ Account Discovery (T1087.001)
+% จาก Splunk Attack Data~\cite{splunk-attack-data} มี Windows Sysmon Logs ถึง 11,090 events
+% ที่เกิดขึ้นภายในเวลาประมาณ 15 นาที (ขนาดไฟล์ XML ประมาณ 16.8 MB)
+% ซึ่งมีเพียงส่วนน้อยเท่านั้นที่เกี่ยวข้องกับการโจมตีจริง
+
+% แม้ Alert จาก SIEM หรือ Endpoint Detection and Response (EDR) จะช่วยชี้ Event หรือกิจกรรมที่ควรตรวจสอบ
+% แต่การระบุว่าเหตุการณ์ดังกล่าวเป็นการโจมตีหรือไม่ และสอดคล้องกับเทคนิคใดใน MITRE ATT\&CK~\cite{mitre-attack}
+% ยังต้องอาศัย SOC Analyst ในการรวบรวมและเชื่อมโยง Logs ที่เกี่ยวข้องเข้าด้วยกัน
+% ซึ่งใช้เวลาและความเชี่ยวชาญสูง
+
+% แนวทางหนึ่งที่ได้รับความสนใจคือการใช้โมเดลภาษาขนาดใหญ่ (Large Language Model: LLM) ช่วยวิเคราะห์ Logs
+% แต่การส่ง Raw Logs ให้ LLM โดยตรงมีปัญหาสำคัญ 2 ประการ ได้แก่
+% (1) ต้นทุนด้าน Token สูง เนื่องจาก Logs มีขนาดใหญ่และมีโครงสร้างซ้ำซ้อน และ
+% (2) Logs มี Noise จำนวนมาก (เหตุการณ์ที่ไม่เกี่ยวข้องกับการวิเคราะห์ รวมถึง Field และ Event ที่ไม่จำเป็น)
+% ซึ่งทำให้ LLM ตีความผิดพลาดได้ง่าย
+% จากการทดลองเบื้องต้นของคณะผู้จัดทำ เมื่อส่ง Raw Logs ของชุดข้อมูล T1087.001 ที่ดึงจาก Splunk ผ่าน API
+% ให้ LLM เชิงพาณิชย์หลายตัววิเคราะห์โดยตรง พบว่าบางโมเดลระบุเทคนิคผิด
+% (เช่น ตอบเป็น T1003 OS Credential Dumping) บางโมเดลสรุปว่าไม่พบการโจมตี
+% และแม้โมเดลที่ตอบใกล้เคียงที่สุดก็ระบุได้เพียงระดับ Technique (T1087) แต่ไม่ถึงระดับ Sub-technique ที่ถูกต้อง
+
+% ด้วยเหตุนี้ โครงงานนี้จึงมุ่งออกแบบและประเมิน \textbf{Context Construction Pipeline}
+% ที่ทำหน้าที่สร้าง \textbf{Investigation Context} ซึ่งหมายถึงชุดเหตุการณ์และความรู้ที่เกี่ยวข้องกับเหตุการณ์ที่น่าสงสัย
+% ที่ถูกจัดเตรียมไว้เพื่อให้ LLM ใช้เหตุผลกับเหตุการณ์นั้น
+% โดย Pipeline จะนำ Alert เป็นจุดเริ่มต้นการสืบสวน แล้วทำการ Normalize, คัดเลือก Event ที่เกี่ยวข้อง (Event Selection)
+% และแปลงรูปแบบข้อมูล (Representation) ให้กระชับ ก่อนเสริมด้วยองค์ความรู้จาก MITRE ATT\&CK
+% ผ่าน Retrieval-Augmented Generation (RAG)~\cite{lewis2020rag}
+% เพื่อให้ LLM ขนาดเล็กที่ทำงานภายในเครื่อง (Local LLM) สามารถระบุเทคนิคการโจมตีได้อย่างแม่นยำ
+% โดยไม่ต้องส่งข้อมูล Logs ขององค์กรออกไปยังบริการภายนอก
+
+\section{\ifenglish Project rationale\else ที่มาของโครงงาน\fi}
+ระบบ Security Information and Event Management (SIEM) ทำหน้าที่รวบรวม
+Security Logs จากแหล่งข้อมูลต่าง ๆ ภายในองค์กร เช่น เครื่องลูกข่าย
+เซิร์ฟเวอร์ และอุปกรณ์เครือข่าย เพื่อนำมาจัดเก็บ ค้นหา และสร้างการแจ้งเตือน
+(Alert) เมื่อพบพฤติกรรมที่น่าสงสัย อย่างไรก็ตาม Logs ที่รวบรวมได้มีปริมาณมาก
+และมีความหลากหลาย ทำให้การตรวจสอบและสืบสวนเหตุการณ์ทำได้ยาก
+เนื่องจากมี Event จำนวนมากที่ไม่เกี่ยวข้องกับเหตุการณ์ที่กำลังตรวจสอบ
+
+ตัวอย่างเช่น ชุดข้อมูลจำลองการโจมตีแบบ Account Discovery: Local Account
+(T1087.001) จาก Splunk Attack Data~\cite{splunk-attack-data}
+ประกอบด้วย Windows Sysmon Logs จำนวน 11,090 events ภายในเวลาประมาณ
+15 นาที และมีขนาดไฟล์ XML ประมาณ 16.8 MB
+
+แม้ Alert จาก SIEM หรือ Endpoint Detection and Response (EDR) 
+จะช่วยระบุ Event ที่ควรตรวจสอบ แต่การทำความเข้าใจเหตุการณ์ยังจำเป็นต้องอาศัย
+Logs อื่นที่มีความสัมพันธ์กัน เช่น Process ต้นทางและ Process ที่เกิดขึ้น
+ต่อเนื่องกัน เพื่อเชื่อมโยงพฤติกรรมและระบุเทคนิคการโจมตีตาม MITRE
+ATT\&CK~\cite{mitre-attack} ซึ่งต้องอาศัยเวลาและความเชี่ยวชาญของ
+SOC Analyst
+
+การนำโมเดลภาษาขนาดใหญ่ (Large Language Model: LLM) มาช่วยวิเคราะห์
+Logs เป็นอีกแนวทางหนึ่ง แต่การส่ง Raw Logs ให้ LLM โดยตรงมีข้อจำกัด
+ทั้งด้านปริมาณ Token ที่สูง และ Noise จาก Event หรือ Field ที่ไม่เกี่ยวข้อง
+ซึ่งอาจส่งผลต่อการวิเคราะห์ นอกจากนี้ การส่ง Security Logs ไปประมวลผล
+ผ่านบริการ LLM ภายนอกยังอาจมีข้อจำกัดด้านความเป็นส่วนตัวและนโยบาย
+การจัดการข้อมูลขององค์กร
+
+จากการทดลองเบื้องต้นของคณะผู้จัดทำ โดยส่ง Raw Logs จากชุดข้อมูล
+T1087.001 ที่ดึงผ่าน Splunk API ให้ LLM วิเคราะห์โดยตรง พบว่าโมเดลบางตัวระบุเทคนิคการโจมตีไม่ถูกต้อง
+บางตัวระบุได้เพียงระดับ Technique แต่ไม่สามารถระบุ Sub-technique ได้ถูกต้อง
+และบางตัวไม่สามารถสรุปได้ว่าพบพฤติกรรมการโจมตีหรือไม่
+
+ด้วยเหตุนี้ โครงงานจึงมุ่งออกแบบและประเมิน
+\textbf{Context Construction Pipeline} เพื่อสร้าง
+\textbf{Investigation Context} ซึ่งเป็นชุดข้อมูลเหตุการณ์และองค์ความรู้ที่เกี่ยวข้องกับ
+Alert สำหรับใช้ประกอบการวิเคราะห์ของ LLM โดยประกอบด้วยการ 
+Normalize Logs ให้อยู่ในรูปแบบมาตรฐาน การคัดเลือก Event ที่เกี่ยวข้อง
+(Event Selection) และการแปลงข้อมูลให้อยู่ในรูปแบบที่เหมาะสม
+(Representation) รวมถึงการใช้ Retrieval-Augmented Generation (RAG)
+~\cite{lewis2020rag} เพื่อค้นคืนองค์ความรู้จาก MITRE ATT\&CK
+มาเสริมการวิเคราะห์
+
+โครงงานนี้มุ่งประเมินผลของการสร้าง Investigation Context ทั้งในด้าน
+การลดปริมาณข้อมูลและการช่วยให้ LLM ระบุ MITRE ATT\&CK Technique
+และ Sub-technique ได้ถูกต้องมากขึ้น รวมถึงศึกษาการใช้ Local LLM
+เพื่อประมวลผลข้อมูลภายในเครื่อง ลดความจำเป็นในการส่ง Security Logs
+ไปยังบริการภายนอก
+
+% \section{\ifenglish Objectives\else วัตถุประสงค์ของโครงงาน\fi}
+% \begin{enumerate}
+%     \item เพื่อออกแบบและพัฒนา Context Construction Pipeline สำหรับสร้าง Investigation Context
+%           จาก Security Logs ในระบบ SIEM ก่อนส่งให้ LLM วิเคราะห์
+%     \item เพื่อเปรียบเทียบประสิทธิภาพของวิธีการคัดเลือก Event (Event Selection)
+%           และรูปแบบการนำเสนอข้อมูล (Representation) แบบต่าง ๆ
+%     \item เพื่อทดสอบว่า Investigation Context ช่วยเพิ่มความแม่นยำในการระบุเทคนิค MITRE ATT\&CK
+%           ได้ดีกว่าการใช้ Raw Logs
+%     \item เพื่อลดปริมาณข้อมูลที่ส่งให้ LLM (ลด Token Cost และลด Noise)
+%           โดยยังคงหลักฐานที่จำเป็นต่อการวิเคราะห์ไว้ครบถ้วน
+%     \item เพื่อพัฒนาต้นแบบ Web Dashboard ที่นำเสนอผลการวิเคราะห์เป็นรายงานการสืบสวน (Investigation Report)
+%           ให้แก่ SOC Analyst
+% \end{enumerate}
+
+\section{\ifenglish Objectives\else วัตถุประสงค์ของโครงงาน\fi}
+\begin{enumerate}
+    \item เพื่อออกแบบและพัฒนา Context Construction Pipeline สำหรับสร้าง
+          Investigation Context จาก Security Logs ในระบบ SIEM
+          ก่อนส่งให้ LLM วิเคราะห์
+
+    \item เพื่อศึกษาและเปรียบเทียบวิธีการคัดเลือก Event (Event Selection)
+          และรูปแบบการนำเสนอข้อมูล (Representation) ที่แตกต่างกัน
+
+    \item เพื่อประเมินผลของการใช้ Investigation Context และ
+          Retrieval-Augmented Generation (RAG) ต่อความถูกต้องของ LLM
+          ขนาดเล็กที่ทำงานภายในเครื่อง ในการระบุ Technique และ Sub-technique
+          ตาม MITRE ATT\&CK เมื่อเทียบกับการใช้ Raw Logs
+
+    \item เพื่อลดปริมาณข้อมูล (จำนวน Token) และ Noise ที่ส่งให้ LLM โดยคง Event ที่จำเป็นต่อการวิเคราะห์ไว้
+
+    \item เพื่อพัฒนาต้นแบบ Web Dashboard สำหรับนำเสนอผลการวิเคราะห์
+          ในรูปแบบรายงานการสืบสวน (Investigation Report)
+          ให้แก่ SOC Analyst
+\end{enumerate}
+
+% \section{\ifenglish Project scope\else ขอบเขตของโครงงาน\fi}
+
+% \subsection{\ifenglish Hardware scope\else ขอบเขตด้านฮาร์ดแวร์\fi}
+% \begin{enumerate}
+%     \item ระบบทำงานบนเครื่องคอมพิวเตอร์ส่วนบุคคลหรือเซิร์ฟเวอร์
+%           ที่มีทรัพยากรประมวลผลเพียงพอสำหรับรัน LLM ขนาดประมาณ
+%           9 พันล้านพารามิเตอร์ (9B) ภายในเครื่อง
+%     \item ไม่มีการพัฒนาหรือติดตั้งอุปกรณ์ฮาร์ดแวร์เฉพาะทาง
+%           เช่น เซนเซอร์หรืออุปกรณ์เครือข่าย
+% \end{enumerate}
+
+% \subsection{\ifenglish Software scope\else ขอบเขตด้านซอฟต์แวร์\fi}
+% \begin{enumerate}
+%     \item ใช้ชุดข้อมูลสาธารณะที่มี Ground Truth เพื่อให้ตรวจสอบความแม่นยำได้
+%           ได้แก่ OTRF Security-Datasets~\cite{otrf-security-datasets} สำหรับออกแบบและวัดผล (Benchmark)
+%           และ Splunk Attack Data~\cite{splunk-attack-data} สำหรับทดสอบ (Validation)
+%           โดยนำ Logs ไป Replay เข้า Splunk Enterprise เพื่อจำลองการทำงานของ SIEM จริง
+%     \item ออกแบบให้รองรับ Logs ในรูปแบบ Windows Sysmon~\cite{sysmon} และ Linux Auditd~\cite{auditd}
+%     \item หน่วยของการวิเคราะห์คือ 1 Alert ต่อ 1 กรณีการสืบสวน (Alert-centric)
+%           โดย Alert ถือเป็น Input ที่ได้รับจาก SIEM/EDR เดิม โครงงานนี้ไม่ได้ทำหน้าที่ตรวจจับภัยคุกคามแทน SIEM/EDR
+%     \item ใช้ LLM ตัวเดียวตลอดการทดลอง (Qwen3.5 9B ทำงานภายในเครื่องผ่าน Ollama)
+%           เพื่อให้ Pipeline เป็นตัวแปรเดียวที่เปลี่ยนแปลงในการทดลอง
+%     \item Ground Truth อยู่ในระดับ Scenario Dataset กล่าวคือ 1 Scenario Dataset มีเทคนิค ATT\&CK
+%           ที่เป็นเฉลยหนึ่งเทคนิค ซึ่งใช้สำหรับประเมินผลเท่านั้น ไม่ได้นำไปใช้ฝึกสอนโมเดล
+%     \item ผลลัพธ์ของระบบคือเทคนิค MITRE ATT\&CK ที่ระบุได้ พร้อมหลักฐานและเหตุผล
+%           นำเสนอเป็น Investigation Report ผ่าน Web Dashboard
+% \end{enumerate}
+
+\section{\ifenglish Project scope\else ขอบเขตของโครงงาน\fi}
+
+\subsection{\ifenglish Hardware scope\else ขอบเขตด้านฮาร์ดแวร์\fi}
+\begin{enumerate}
+    \item ระบบทำงานบนเครื่องคอมพิวเตอร์ส่วนบุคคลหรือเซิร์ฟเวอร์
+          ที่มีทรัพยากรประมวลผลเพียงพอสำหรับรัน LLM ขนาดประมาณ
+          9 พันล้านพารามิเตอร์ (9B) ภายในเครื่อง
+    \item ไม่มีการพัฒนาหรือติดตั้งอุปกรณ์ฮาร์ดแวร์เฉพาะทาง
+          เช่น เซนเซอร์หรืออุปกรณ์เครือข่าย
+\end{enumerate}
+
+\subsection{\ifenglish Software scope\else ขอบเขตด้านซอฟต์แวร์\fi}
+\begin{enumerate}
+    \item ใช้ชุดข้อมูลสาธารณะที่มี Ground Truth จำนวน 2 แหล่ง ได้แก่
+          Splunk Attack Data~\cite{splunk-attack-data} เฉพาะชุดที่สร้างด้วย Atomic Red Team~\cite{atomic-red-team}
+          จำนวน 35 ไฟล์ เป็นชุดข้อมูลสำหรับพัฒนา (Development Set)
+          ใช้ระบุ Event สำคัญ (Event-level Annotation) และปรับพารามิเตอร์ของ Pipeline
+          และ OTRF Security-Datasets~\cite{otrf-security-datasets} แบบ Atomic จำนวน 40 ชุด
+          เป็นชุดข้อมูลสำหรับทดสอบ (Test Set) ซึ่งใช้ประเมินผลเพียงครั้งเดียวหลังกำหนดค่าพารามิเตอร์แล้ว
+
+    \item ประเมินผลกับเทคนิค MITRE ATT\&CK จำนวน 23 เทคนิค ที่คัดเลือกตามเกณฑ์ที่กำหนดไว้ล่วงหน้า
+          (รายละเอียดในบทที่ 3) โดยแต่ละชุดข้อมูลจำลองการโจมตีเพียงเทคนิคเดียว
+          และใช้ชุดข้อมูล T1087.001 เป็นกรณีนำร่อง (Pilot) ซึ่งไม่นับรวมในผลการประเมินหลัก
+
+    \item การประเมินความถูกต้องใช้ Logs ในรูปแบบ Windows Sysmon~\cite{sysmon}
+          ส่วน Linux Auditd~\cite{auditd} รองรับในขั้นตอน Normalize และทดสอบในระดับการทำงานของระบบ
+          แต่ไม่ประเมินความถูกต้อง เนื่องจากไม่มีชุดข้อมูลที่ใช้สร้างทั้ง Development Set และ Test Set ได้
+
+    \item กำหนดหน่วยการวิเคราะห์เป็น 1 Alert ต่อ 1 กรณีการสืบสวน (Alert-centric)
+          โดย Alert สร้างจาก Detection Rule ทางการของ Splunk (ES Content Update: ESCU)~\cite{splunk-escu}
+          เมื่อ Replay Logs เข้า Splunk Enterprise และใช้ Alert ที่เป็นการโจมตีจริง (True Positive) 1 รายการต่อไฟล์
+          หากไฟล์ใดไม่มี Alert จะใช้ Event การสร้าง Process ของคำสั่งโจมตีเป็นจุดเริ่มต้นแทน
+          โครงงานนี้ไม่ได้พัฒนาระบบตรวจจับภัยคุกคามขึ้นมาแทน SIEM/EDR
+
+    \item ใช้ LLM รุ่นเดียวกันตลอดการทดลอง คือ Qwen3.5 9B
+          ซึ่งทำงานภายในเครื่องผ่าน Ollama โดยเปลี่ยนวิธีการสร้าง
+          Investigation Context และการใช้ RAG ตามรูปแบบการทดลอง
+
+    \item Ground Truth ระดับ Scenario Dataset คือเทคนิค MITRE ATT\&CK ที่ใช้สร้างชุดข้อมูล
+          ใช้สำหรับประเมินผลเท่านั้น และไม่ได้นำมาใช้ฝึกสอนโมเดล
+          ส่วน Ground Truth ระดับ Event มีเฉพาะใน Development Set
+          ใช้สำหรับปรับพารามิเตอร์และวัดสัดส่วนหลักฐานที่ถูกคัดเลือก
+
+    \item ผลลัพธ์ของระบบประกอบด้วยเทคนิค MITRE ATT\&CK ที่ LLM ระบุ
+          พร้อมหลักฐานจาก Logs และเหตุผลประกอบการวิเคราะห์
+          โดยนำเสนอในรูปแบบ Investigation Report ผ่าน Web Dashboard
+
+    \item สิ่งที่อยู่นอกขอบเขต ได้แก่ การจำแนก Alert ว่าเป็น True Positive หรือ False Positive
+          การวิเคราะห์ชุดข้อมูลที่มีหลายเทคนิคในเหตุการณ์เดียว (เช่น การจำลองกลุ่ม APT)
+          และการประเมินความถูกต้องบน Linux Auditd
+\end{enumerate}
+
+% \section{\ifenglish Expected outcomes\else ประโยชน์ที่ได้รับ\fi}
+% \begin{enumerate}
+%     \item ได้ Context Construction Pipeline ที่สามารถลดปริมาณข้อมูลและ Token ที่ส่งให้ LLM
+%           โดยยังคงหลักฐานที่จำเป็นต่อการระบุเทคนิคการโจมตี
+%     \item ได้ผลการเปรียบเทียบเชิงทดลองของวิธี Event Selection และ Representation แบบต่าง ๆ
+%           รวมถึงผลของการใช้ RAG ต่อความแม่นยำของ LLM ขนาดเล็ก
+%     \item ได้ระบบต้นแบบ LLM-based SIEM Investigation Assistant ที่เชื่อมต่อกับ SIEM (Splunk)
+%           และสร้าง Investigation Report ให้ SOC Analyst ผ่าน Web Dashboard
+%     \item ช่วยให้ SOC Analyst ลดเวลาในการสืบสวนเหตุการณ์ และช่วยให้องค์กรลดต้นทุนการใช้ LLM
+%           โดยสามารถใช้โมเดลที่ทำงานภายในองค์กรได้
+%     \item คณะผู้จัดทำได้เรียนรู้และประยุกต์ใช้ความรู้ด้านความมั่นคงปลอดภัยไซเบอร์ ระบบ SIEM
+%           และการประยุกต์ใช้ LLM กับข้อมูลจริง
+% \end{enumerate}
+
+\section{\ifenglish Expected outcomes\else ประโยชน์ที่ได้รับ\fi}
+\begin{enumerate}
+    \item ได้ Context Construction Pipeline ที่ลดปริมาณข้อมูลและจำนวน Token ที่ส่งให้ LLM
+          โดยคง Event ที่จำเป็นต่อการวิเคราะห์ไว้
+
+    \item ได้ผลการเปรียบเทียบเชิงทดลองของวิธี Event Selection และ Representation รูปแบบต่าง ๆ
+          รวมถึงผลของการใช้ RAG ต่อความสามารถของ LLM ขนาดเล็กที่ทำงานภายในเครื่อง
+          ในการระบุเทคนิคการโจมตีตาม MITRE ATT\&CK
+
+    \item ได้ระบบต้นแบบ LLM-based SIEM Investigation Assistant ที่เชื่อมต่อกับ SIEM (Splunk)
+          และสร้าง Investigation Report เพื่อนำเสนอผลการวิเคราะห์ให้ SOC Analyst ผ่าน Web Dashboard
+
+    \item ได้แนวทางในการลดต้นทุนการใช้ LLM จากการลดจำนวน Token และการใช้โมเดลที่ทำงานภายในองค์กร
+          รวมถึงมีส่วนช่วยลดภาระและเวลาในการสืบสวนเหตุการณ์ของ SOC Analyst
+
+    \item คณะผู้จัดทำได้เรียนรู้และประยุกต์ใช้ความรู้ด้านความมั่นคงปลอดภัยไซเบอร์ ระบบ SIEM
+          และการประยุกต์ใช้ LLM กับ Security Logs
+\end{enumerate}
+
+% \section{\ifenglish Technology and tools\else เทคโนโลยีและเครื่องมือที่ใช้\fi}
+
+% \subsection{\ifenglish Hardware technology\else เทคโนโลยีด้านฮาร์ดแวร์\fi}
+% \begin{enumerate}
+%     \item เครื่องคอมพิวเตอร์ส่วนบุคคลที่มี GPU สำหรับรัน LLM และ Embedding Model ภายในเครื่อง
+%           % TODO: ระบุสเปกเครื่อง เช่น CPU, RAM, รุ่น GPU และขนาด VRAM
+%     \item เครื่องเสมือนหรือเซิร์ฟเวอร์สำหรับติดตั้ง Splunk Enterprise เพื่อจำลองระบบ SIEM
+% \end{enumerate}
+
+% \subsection{\ifenglish Software technology\else เทคโนโลยีด้านซอฟต์แวร์\fi}
+% \begin{enumerate}
+%     \item \textbf{Splunk Enterprise} -- ระบบ SIEM สำหรับรับและจัดเก็บ Logs ที่ Replay จากชุดข้อมูล
+%           และเป็นแหล่งข้อมูลที่ Pipeline ดึง Logs ผ่าน REST API
+%     \item \textbf{Python} -- ภาษาหลักสำหรับพัฒนา Pipeline ได้แก่ การ Parse/Normalize Logs,
+%           Event Selection, Representation, RAG และการประเมินผล
+%     \item \textbf{Ollama}~\cite{ollama} -- เครื่องมือสำหรับรัน LLM ภายในเครื่อง
+%     \item \textbf{Qwen3.5:9B} -- LLM ที่ใช้วิเคราะห์ Investigation Context
+%           และ \textbf{qwen3-embedding:0.6b} สำหรับสร้าง Embedding ของฐานความรู้ใน RAG
+%     \item \textbf{Hermes} -- Harness สำหรับจัดการ Prompt และการเรียกใช้งานโมเดล
+%     \item \textbf{MITRE ATT\&CK Enterprise v19.2 (STIX)} -- ฐานความรู้เทคนิคการโจมตีที่ใช้สร้าง Knowledge Base ของ RAG
+%     \item \textbf{React (TypeScript) + Vite} -- พัฒนาส่วนหน้า (Frontend) ของ Web Dashboard
+%     \item \textbf{Git/GitHub} และ \textbf{Visual Studio Code} -- จัดการซอร์สโค้ดและพัฒนาโปรแกรม
+% \end{enumerate}
+
+\section{\ifenglish Technology and tools\else เทคโนโลยีและเครื่องมือที่ใช้\fi}
+
+\subsection{\ifenglish Hardware technology\else เทคโนโลยีด้านฮาร์ดแวร์\fi}
+\begin{enumerate}
+    \item เครื่องคอมพิวเตอร์ส่วนบุคคลที่มีหน่วยประมวลผลกราฟิก (GPU)
+          สำหรับรัน LLM และ Embedding Model ภายในเครื่อง
+          % TODO: ระบุสเปกเครื่อง เช่น CPU, RAM, รุ่น GPU และ VRAM
+
+    \item เครื่องคอมพิวเตอร์ส่วนบุคคลสำหรับติดตั้ง
+          Splunk Enterprise เพื่อจำลองระบบ SIEM
+\end{enumerate}
+
+\subsection{\ifenglish Software technology\else เทคโนโลยีด้านซอฟต์แวร์\fi}
+\begin{enumerate}
+    \item \textbf{Splunk Enterprise} -- ระบบ SIEM สำหรับรับและจัดเก็บ
+          Logs ที่ Replay จากชุดข้อมูล และเป็นแหล่งข้อมูลที่ Pipeline
+          ใช้ดึง Logs ผ่าน REST API
+
+    \item \textbf{Docker และ Splunk Apps} -- ติดตั้ง Splunk Enterprise 9.3 ใน Docker
+          ร่วมกับ Splunk Common Information Model, Splunk Add-on for Sysmon,
+          Splunk Add-on for Microsoft Windows และ ES Content Update (ESCU)
+          สำหรับสร้าง Alert จาก Detection Rule
+
+    \item \textbf{Python} -- ภาษาหลักที่ใช้พัฒนา Pipeline
+          ได้แก่ การ Parse และ Normalize Logs, Event Selection,
+          Representation, RAG และการประเมินผล
+
+    \item \textbf{Ollama}~\cite{ollama} -- เครื่องมือสำหรับรัน
+          LLM และ Embedding Model ภายในเครื่อง
+
+    \item \textbf{Qwen3.5:9B} -- LLM ที่ใช้วิเคราะห์ Investigation Context
+
+    \item \textbf{Qwen3-embedding:0.6b} -- Embedding Model สำหรับแปลงฐานความรู้และ Query เป็นเวกเตอร์ใน RAG
+
+    \item \textbf{Hermes} -- เครื่องมือสำหรับจัดการ Prompt
+          และการเรียกใช้งานโมเดล (Model Invocation)
+
+    \item \textbf{MITRE ATT\&CK Enterprise v19.2 (STIX)}
+          -- ฐานความรู้เกี่ยวกับเทคนิคการโจมตีที่ใช้สร้าง
+          Knowledge Base สำหรับ RAG
+
+    \item \textbf{React (TypeScript) และ Vite} -- เทคโนโลยีที่ใช้พัฒนาส่วนหน้า (Frontend) ของ Web Dashboard
+
+    \item \textbf{Git/GitHub} และ \textbf{Visual Studio Code}
+          -- เครื่องมือสำหรับจัดการซอร์สโค้ดและพัฒนาโปรแกรม
+\end{enumerate}
+
+\section{\ifenglish Project plan\else แผนการดำเนินงาน\fi}
+
+แผนการดำเนินงานของโครงงานแสดงดังตารางด้านล่าง
+ณ วันที่จัดทำรายงานนี้ ขั้นตอนการตกลงหัวข้อ การรวบรวมข้อมูล การออกแบบภาพรวม Pipeline
+และการติดตั้ง Splunk พร้อมป้อนข้อมูลจำลองได้ดำเนินการเสร็จสิ้นแล้ว
+ส่วนการออกแบบ Event Selection \& Representation การทำ Ground Truth
+การพัฒนา RAG และ Web Dashboard อยู่ระหว่างดำเนินการ
+
+\begin{plan}{6}{2026}{3}{2027}
+    \planitem{6}{2026}{6}{2026}{ตกลงหัวข้อโครงงาน}
+    \planitem{7}{2026}{8}{2026}{รวบรวมข้อมูล (ชุดข้อมูลและงานที่เกี่ยวข้อง)}
+    \planitem{7}{2026}{7}{2026}{ออกแบบภาพรวม Pipeline}
+    \planitem{8}{2026}{8}{2026}{ติดตั้ง Splunk และป้อนข้อมูลจำลอง}
+    \planitem{9}{2026}{9}{2026}{ออกแบบ Event Selection \& Representation}
+    \planitem{10}{2026}{10}{2026}{จัดทำ Ground Truth}
+    \planitem{10}{2026}{10}{2026}{สร้าง Parser และ Backend API}
+    \planitem{11}{2026}{11}{2026}{Implement Event Selection \& Representation}
+    \planitem{11}{2026}{12}{2026}{พัฒนา RAG}
+    \planitem{12}{2026}{12}{2026}{เขียน System Prompt}
+    \planitem{12}{2026}{1}{2027}{พัฒนา Web Dashboard}
+    \planitem{1}{2027}{1}{2027}{Integration Testing}
+    \planitem{1}{2027}{2}{2027}{การทดลองและการประเมินผล}
+    \planitem{2}{2027}{3}{2027}{จัดทำรูปเล่มรายงาน}
+\end{plan}
+
+% \section{\ifenglish Roles and responsibilities\else บทบาทและความรับผิดชอบ\fi}
+
+% คณะผู้จัดทำแบ่งบทบาทและหน้าที่ ดังนี้
+% \begin{enumerate}
+%     \item \textbf{นายธนกร เสาคำ} (Full-Stack \& Validation) --
+%           พัฒนา Web Dashboard ทั้งส่วน Frontend และ Backend API
+%           เชื่อมต่อระบบกับ Splunk และตรวจสอบความถูกต้องของผลลัพธ์ (Validation)
+%           ใช้ความรู้ด้าน Software Engineering, Web Development และฐานข้อมูล
+%     \item \textbf{นางสาวนพรดา กฤษวัฒนานนท์} (AI \& Experiment) --
+%           พัฒนาส่วน RAG และ LLM Analysis ออกแบบ Prompt
+%           ออกแบบและดำเนินการทดลองเพื่อประเมินผล
+%           ใช้ความรู้ด้าน Machine Learning, Natural Language Processing และการออกแบบการทดลอง
+%     \item \textbf{นายบูรณิน บุณโยประการ} (Data Processing) --
+%           จัดการชุดข้อมูล การ Replay Logs เข้า Splunk การ Normalize
+%           และการพัฒนาวิธี Event Selection และ Representation
+%           ใช้ความรู้ด้านระบบปฏิบัติการ ความมั่นคงปลอดภัยไซเบอร์ โครงสร้างข้อมูลและอัลกอริทึมบนกราฟ
+% \end{enumerate}
+
+\section{\ifenglish Roles and responsibilities\else บทบาทและความรับผิดชอบ\fi}
+
+คณะผู้จัดทำแบ่งบทบาทและหน้าที่ ดังนี้
+\begin{enumerate}
+    \item \textbf{นายธนกร เสาคำ} (RAG \& Web Dashboard) --
+          รับผิดชอบการพัฒนาส่วน Retrieval-Augmented Generation (RAG)
+          และการวิเคราะห์ข้อมูลด้วย LLM รวมถึงการพัฒนา Web Dashboard
+          ทั้งส่วน Frontend และ Backend API
+          โดยประยุกต์ใช้ความรู้ด้าน Software Engineering,
+          Web Development, Database และ Natural Language Processing
+
+    \item \textbf{นางสาวนพรดา กฤษวัฒนานนท์}
+          (Event Selection \& Representation Design) --
+          ร่วมกับผู้รับผิดชอบส่วน Pipeline ในการศึกษาและออกแบบ
+          วิธีการคัดเลือก Event (Event Selection)
+          และรูปแบบการนำเสนอข้อมูล (Representation)
+          รวมถึงมีส่วนร่วมในการทดสอบและประเมินผลการทำงาน
+          โดยประยุกต์ใช้ความรู้ด้าน Cybersecurity,
+          Data Processing และการออกแบบการทดลอง
+
+    \item \textbf{นายบูรณิน บุณโยประการ}
+          (Pipeline \& Data Processing) --
+          รับผิดชอบการจัดการชุดข้อมูลและการ Replay Logs
+          เข้า Splunk Enterprise รวมถึงการพัฒนา Context Construction
+          Pipeline ในส่วนของการ Parse/Normalize Logs,
+          Event Selection และ Representation
+          โดยประยุกต์ใช้ความรู้ด้านระบบปฏิบัติการ
+          ความมั่นคงปลอดภัยไซเบอร์ โครงสร้างข้อมูล
+          และอัลกอริทึมบนกราฟ
+\end{enumerate}
+
+\section{\ifenglish%
+Impacts of this project on society, health, safety, legal, and cultural issues
+\else%
+ผลกระทบด้านสังคม สุขภาพ ความปลอดภัย กฎหมาย และวัฒนธรรม
+\fi}
+
+% \subsection{ผลกระทบด้านสังคม}
+% โครงงานนี้ช่วยให้หน่วยงานที่มีบุคลากรด้านความปลอดภัยจำกัด สามารถสืบสวนเหตุการณ์ได้รวดเร็วขึ้น
+% และนำ LLM มาใช้ได้ด้วยต้นทุนที่ต่ำลง ส่งผลให้ระบบสารสนเทศขององค์กรและผู้ใช้บริการมีความปลอดภัยมากขึ้น
+
+% \subsection{ผลกระทบด้านสุขภาพ}
+% การลดปริมาณงานคัดกรอง Logs ที่ซ้ำซากช่วยลดภาระงานและความเหนื่อยล้าจากการแจ้งเตือนจำนวนมาก (Alert Fatigue)
+% ของ SOC Analyst ทางอ้อม
+
+% \subsection{ผลกระทบด้านความปลอดภัย}
+% ระบบใช้ LLM ที่ทำงานภายในเครื่อง ทำให้ Logs ซึ่งอาจมีข้อมูลสำคัญขององค์กรไม่ต้องถูกส่งออกไปยังผู้ให้บริการภายนอก
+% อย่างไรก็ดี ผลการวิเคราะห์ของ LLM อาจผิดพลาดได้ ระบบจึงออกแบบให้แสดงหลักฐาน (Evidence) ประกอบทุกคำตอบ
+% และ SOC Analyst ยังเป็นผู้ตัดสินใจขั้นสุดท้าย
+
+% \subsection{ผลกระทบด้านกฎหมาย}
+% โครงงานใช้เฉพาะชุดข้อมูลสาธารณะที่เผยแพร่เพื่อการวิจัย
+% และการประมวลผลภายในเครื่องช่วยสนับสนุนการปฏิบัติตามกฎหมายคุ้มครองข้อมูลส่วนบุคคล (PDPA)
+% เมื่อนำไปใช้กับข้อมูลจริงขององค์กร
+
+% \subsection{ผลกระทบด้านวัฒนธรรม}
+% ไม่มีผลกระทบโดยตรงต่อวัฒนธรรม แต่ส่งเสริมวัฒนธรรมการทำงานด้านความปลอดภัยที่ตัดสินใจโดยอาศัยหลักฐาน (Evidence-based)
+
+\subsection{ผลกระทบด้านสังคม}
+โครงงานนี้มีศักยภาพในการช่วยให้หน่วยงานที่มีบุคลากรด้านความปลอดภัย
+จำกัดสามารถสืบสวนเหตุการณ์ได้อย่างมีประสิทธิภาพมากขึ้น
+และนำ LLM มาใช้วิเคราะห์ข้อมูลได้ด้วยต้นทุนที่เหมาะสม
+ซึ่งอาจช่วยยกระดับความปลอดภัยของระบบสารสนเทศภายในองค์กร
+และผู้ใช้บริการ
+
+\subsection{ผลกระทบด้านสุขภาพ}
+การช่วยคัดกรองและจัดกลุ่ม Logs ที่เกี่ยวข้องกับเหตุการณ์
+อาจช่วยลดภาระงานที่ซ้ำซากของ SOC Analyst
+รวมถึงลดความเหนื่อยล้าจากการแจ้งเตือนจำนวนมาก
+(Alert Fatigue) ทางอ้อม
+
+\subsection{ผลกระทบด้านความปลอดภัย}
+การใช้ LLM ที่ทำงานภายในเครื่องช่วยลดความจำเป็นในการส่ง
+Logs ซึ่งอาจมีข้อมูลสำคัญขององค์กรไปยังผู้ให้บริการภายนอก
+อย่างไรก็ตาม ผลการวิเคราะห์ของ LLM อาจมีความผิดพลาดได้
+ระบบจึงออกแบบให้แสดงหลักฐาน (Evidence) ประกอบผลการวิเคราะห์
+เพื่อให้ SOC Analyst สามารถตรวจสอบและใช้ประกอบการตัดสินใจ
+โดย SOC Analyst ยังคงเป็นผู้ตัดสินใจขั้นสุดท้าย
+
+\subsection{ผลกระทบด้านกฎหมาย}
+โครงงานใช้ชุดข้อมูลสาธารณะที่เผยแพร่เพื่อการศึกษาและวิจัย
+โดยการประมวลผล Logs ภายในเครื่องยังช่วยลดความเสี่ยง
+จากการส่งข้อมูลที่อาจมีข้อมูลส่วนบุคคลไปยังบริการภายนอก
+และสามารถสนับสนุนการคุ้มครองข้อมูลส่วนบุคคลตามหลักการของ
+พระราชบัญญัติคุ้มครองข้อมูลส่วนบุคคล (PDPA)
+เมื่อนำไปประยุกต์ใช้กับข้อมูลจริงขององค์กร ทั้งนี้
+การใช้งานจริงยังต้องคำนึงถึงสิทธิในการประมวลผลข้อมูล
+และมาตรการรักษาความปลอดภัยที่เกี่ยวข้อง
+
+\subsection{ผลกระทบด้านวัฒนธรรม}
+โครงงานนี้ไม่มีผลกระทบโดยตรงต่อวัฒนธรรม
+แต่ช่วยส่งเสริมแนวทางการทำงานด้านความมั่นคงปลอดภัยไซเบอร์
+ที่ให้ความสำคัญกับการตรวจสอบหลักฐาน (Evidence-based)
+และการใช้ข้อมูลประกอบการตัดสินใจ

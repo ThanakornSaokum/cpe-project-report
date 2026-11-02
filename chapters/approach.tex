@@ -80,8 +80,29 @@ Input และ Output ของแต่ละขั้นตอนสรุป
 \label{sec:dataset}
 
 \subsection{การคัดเลือกเทคนิค}
+ก่อนอธิบายเกณฑ์ ขอนิยามคำที่ใช้ในหัวข้อนี้ดังนี้
+\begin{itemize}
+  \item \textbf{Windows Atomic (OTRF)} -- ชุดข้อมูลของ OTRF ที่บันทึกจากเครื่อง Windows
+        และจำลองพฤติกรรมการโจมตีเพียงพฤติกรรมเดียว ต่างจากชุดแบบ Compound ที่จำลองทั้ง Campaign
+        และมีหลายเทคนิคปนกัน (เช่น การจำลองกลุ่ม APT29)
+  \item \textbf{Atomic Red Team (ART)}~\cite{atomic-red-team} -- คลังชุดทดสอบการโจมตีแบบโอเพนซอร์สของ Red Canary
+        แยกตามเทคนิค ATT\&CK โดยแต่ละชุดทดสอบเขียนคำสั่งที่ใช้โจมตีไว้ชัดเจนในไฟล์ YAML
+        และรันผ่านคำสั่ง PowerShell \texttt{Invoke-AtomicTest}
+  \item \textbf{ชุดข้อมูล ART ของ Splunk} -- ชุดข้อมูลในโฟลเดอร์ \texttt{atomic\_red\_team} ของ Splunk Attack Data
+        ซึ่งบันทึก Logs ขณะรัน Atomic Red Team ใน Lab ที่สร้างด้วย attack\_range
+\end{itemize}
+
+เหตุผลที่เลือกเฉพาะชุดข้อมูล ART ของ Splunk เป็น Development Set คือ
+ชุดข้อมูลแบบนี้รู้คำสั่งโจมตีล่วงหน้า และใน Logs มีร่องรอยของคำสั่ง \texttt{Invoke-AtomicTest}
+หรือไฟล์จากโฟลเดอร์ \texttt{AtomicRedTeam} เป็นจุดเริ่มต้นของการโจมตี
+จึงไล่ตาม Process Tree เพื่อระบุ Event ที่เป็นการโจมตี (Ground Truth ระดับ Event) ได้อัตโนมัติ
+ส่วนชุดข้อมูลในโฟลเดอร์อื่น เช่น \texttt{snapattack} หรือชุดที่จำลองด้วยมือ ไม่มีร่องรอยดังกล่าว
+ต้องระบุ Event ที่เป็นการโจมตีด้วยมือทั้งหมด ซึ่งใช้เวลามากและตรวจสอบซ้ำได้ยาก
+นอกจากนี้ ART ยังเป็นเครื่องมือมาตรฐานที่ใช้แพร่หลาย แต่ละชุดทดสอบตรงกับเทคนิคเดียว และทำซ้ำได้
+
 เทคนิคที่ใช้ทดลองถูกคัดเลือกด้วยเกณฑ์ที่กำหนดไว้ล่วงหน้า ไม่ได้เลือกด้วยมือ
-ดังตารางที่~\ref{tab:technique-funnel}
+ดังตารางที่~\ref{tab:technique-funnel} โดยขั้นที่ 0--1 นับเป็นจำนวนไฟล์หรือชุดข้อมูล
+ขั้นที่ 2--3 นับเป็นจำนวนเทคนิค และขั้นที่ 4 นับเป็นจำนวนไฟล์และชุดข้อมูลที่ใช้ทดลองจริง
 ตัวเลขทั้งหมดนับจาก Repository ที่ระบุ Commit ไว้ในตารางที่~\ref{tab:snapshot}
 
 \begin{table}[ht]
@@ -95,10 +116,13 @@ Input และ Output ของแต่ละขั้นตอนสรุป
     0 & Metadata ทั้งหมด &
       Splunk 1,030 ไฟล์ YAML (313 เทคนิค) / OTRF 100 ชุด Windows Atomic & จุดเริ่มต้น \\ \hline
     1 & Windows Sysmon และระบุเทคนิคเดียว &
-      Splunk 193 เทคนิค / OTRF 87 ชุดที่มี Sysmon EID 1 จริง (47 เทคนิค) &
-      กราฟของวิธี Top-$k$ ใช้ EID 1 และ Ground Truth เป็นเทคนิคเดียว \\ \hline
-    2 & มีในทั้งสองแหล่ง & 40 เทคนิค & Development Set และ Test Set ต้องครอบคลุมเทคนิคเดียวกัน \\ \hline
-    3 & Splunk มีชุดข้อมูล Atomic Red Team & \textbf{23 เทคนิค} & ระบุ Event สำคัญได้อัตโนมัติเฉพาะชุด ART \\ \hline
+      Splunk 425 ไฟล์ YAML (193 เทคนิค) / OTRF 97 ชุดที่มี Sysmon Event อย่างน้อย 1 รายการเมื่อเปิดอ่านไฟล์จริง (50 เทคนิค) &
+      ต้องมีข้อมูล Sysmon ให้วิเคราะห์ และ Ground Truth เป็นเทคนิคเดียว \\ \hline
+    2 & เทคนิคที่มีในทั้งสองแหล่ง & 42 เทคนิค & Development Set และ Test Set ต้องครอบคลุมเทคนิคเดียวกัน \\ \hline
+    3 & Splunk มีชุดข้อมูล Atomic Red Team & \textbf{24 เทคนิค} & ระบุ Event สำคัญได้อัตโนมัติเฉพาะชุด ART \\ \hline
+    4 & เลือกไฟล์และชุดข้อมูลของ 24 เทคนิค &
+      Dev: ไฟล์ Sysmon ของชุด ART \textbf{38 ไฟล์} / Test: OTRF 54 ชุด จำกัดไม่เกิน 3 ชุดต่อเทคนิค เหลือ \textbf{42 ชุด} &
+      รายละเอียดในหัวข้อ~\ref{sec:dev-test} \\ \hline
   \end{tabular}
 \end{table}
 
@@ -121,9 +145,14 @@ Input และ Output ของแต่ละขั้นตอนสรุป
 จึงใช้เป็นกรณีนำร่อง (Pilot) สำหรับตรวจสอบว่า Pipeline ทำงานได้ครบทุกขั้นตอนเท่านั้น
 
 \subsection{Development Set และ Test Set}
-\textbf{Development Set} ประกอบด้วยไฟล์ Sysmon จากชุดข้อมูล Atomic Red Team ของ Splunk จำนวน 35 ไฟล์
-ใช้สำหรับระบุ Event สำคัญและปรับพารามิเตอร์ ส่วน \textbf{Test Set} ประกอบด้วยชุดข้อมูล OTRF แบบ Atomic จำนวน 40 ชุด
-ซึ่งคัดจาก 54 ชุดที่ตรงกับ 23 เทคนิค โดยตัดชุดที่ไม่มี EID 1 หรือไฟล์ใช้งานไม่ได้ออก 4 ชุด
+\label{sec:dev-test}
+\textbf{Development Set} มาจากไฟล์ Sysmon ในชุดข้อมูล ART ของ Splunk ที่ตรงกับ 24 เทคนิค
+ซึ่ง Metadata ระบุไว้ 39 ไฟล์ แต่มีไฟล์จริงใน Repository \textbf{38 ไฟล์}
+(ไฟล์ \texttt{T1021.002/dns-sysmon.log} ถูกระบุใน Metadata แต่ไม่มีใน Repository)
+ใช้สำหรับปรับพารามิเตอร์และ Prompt ของ Pipeline
+
+\textbf{Test Set} ประกอบด้วยชุดข้อมูล OTRF แบบ Windows Atomic จำนวน \textbf{42 ชุด}
+คัดจาก 54 ชุดที่ตรงกับ 24 เทคนิคและมีไฟล์ Sysmon ใช้งานได้
 แล้วจำกัดไม่เกิน 3 ชุดต่อเทคนิค ด้วยกฎ ``เลือกชุดที่ใช้เครื่องมือต่างกันก่อน ถ้าเท่ากันเลือกชุดที่เก่ากว่า''
 จำนวนข้อมูลแยกตามเทคนิคแสดงในตารางที่~\ref{tab:dev-test}
 
@@ -133,45 +162,52 @@ Input และ Output ของแต่ละขั้นตอนสรุป
 จึงทดสอบได้ว่าค่าที่ปรับบนข้อมูลของ Splunk ใช้กับข้อมูลจากแหล่งอื่นได้หรือไม่
 และป้องกันไม่ให้ลักษณะเฉพาะของสภาพแวดล้อมเดียวกันรั่วจาก Development Set ไปยัง Test Set
 
-\begin{table}[ht]
+\begin{table}[htbp]
   \centering
   \caption{จำนวนข้อมูลใน Development Set และ Test Set แยกตามเทคนิค}
   \label{tab:dev-test}
   \small
-  \begin{tabular}{|l|l|c|c|}
+  \begin{tabular}{|l|L{0.52\textwidth}|c|c|}
     \hline
     \textbf{เทคนิค} & \textbf{ชื่อ} & \textbf{Dev (ไฟล์)} & \textbf{Test (ชุด)} \\ \hline
     T1003.001 & OS Credential Dumping: LSASS Memory & 3 & 3 \\ \hline
     T1003.002 & OS Credential Dumping: Security Account Manager & 1 & 3 \\ \hline
     T1003.003 & OS Credential Dumping: NTDS & 1 & 3 \\ \hline
     T1021.002 & Remote Services: SMB/Windows Admin Shares & 3 & 3 \\ \hline
-    T1047     & Windows Management Instrumentation & 1 & 3 \\ \hline
+    T1047 & Windows Management Instrumentation & 1 & 3 \\ \hline
     T1053.005 & Scheduled Task/Job: Scheduled Task & 1 & 3 \\ \hline
+    T1059.001 & Command and Scripting Interpreter: PowerShell & 3 & 1 \\ \hline
     T1069.001 & Permission Groups Discovery: Local Groups & 1 & 2 \\ \hline
-    T1112     & Modify Registry & 4 & 3 \\ \hline
-    T1197     & BITS Jobs & 1 & 1 \\ \hline
+    T1112 & Modify Registry & 4 & 3 \\ \hline
+    T1197 & BITS Jobs & 1 & 1 \\ \hline
     T1218.001 & System Binary Proxy Execution: Compiled HTML File & 2 & 1 \\ \hline
     T1218.002 & System Binary Proxy Execution: Control Panel & 1 & 1 \\ \hline
     T1218.004 & System Binary Proxy Execution: InstallUtil & 2 & 1 \\ \hline
     T1218.005 & System Binary Proxy Execution: Mshta & 2 & 3 \\ \hline
     T1218.010 & System Binary Proxy Execution: Regsvr32 & 1 & 1 \\ \hline
-    T1220     & XSL Script Processing & 1 & 1 \\ \hline
+    T1220 & XSL Script Processing & 1 & 1 \\ \hline
     T1222.001 & Windows File and Directory Permissions Modification & 1 & 1 \\ \hline
     T1543.003 & Create or Modify System Process: Windows Service & 2 & 1 \\ \hline
     T1546.003 & Event Triggered Execution: WMI Event Subscription & 1 & 1 \\ \hline
-    T1547.001 & Boot or Logon Autostart: Registry Run Keys & 2 & 1 \\ \hline
+    T1547.001 & Boot or Logon Autostart: Registry Run Keys & 2 & 2 \\ \hline
     T1548.002 & Abuse Elevation Control: Bypass UAC & 1 & 1 \\ \hline
     T1550.002 & Use Alternate Authentication Material: Pass the Hash & 1 & 1 \\ \hline
     T1562.004 & Impair Defenses: Disable or Modify System Firewall & 1 & 1 \\ \hline
     T1574.001 & Hijack Execution Flow: DLL & 1 & 1 \\ \hline
-    \multicolumn{2}{|r|}{\textbf{รวม}} & \textbf{35} & \textbf{40} \\ \hline
+    \multicolumn{2}{|r|}{\textbf{รวม}} & \textbf{38} & \textbf{42} \\ \hline
   \end{tabular}
 \end{table}
 
 ชุดข้อมูลใน Test Set บางชุดมีป้ายกำกับเทคนิคที่น่าสงสัย เช่น ชุด Rubeus ASKTGT ที่ระบุเป็น T1003.003
 แต่เป็นพฤติกรรมเกี่ยวกับ Kerberos Ticket และชุด MSBuild ที่ระบุเป็น T1047
 ซึ่งจะทบทวนก่อนล็อกค่าการทดลอง หากตัดชุดใดออกจะเลือกชุดถัดไปตามกฎเดิม
-นอกจากนี้ จำนวนข้อมูลข้างต้นยังเป็นค่าสูงสุด เพราะยังต้องผ่านขั้นตอนคัดกรองในหัวข้อ~\ref{sec:case-prep}
+ทั้งนี้ ชุดข้อมูลใน Test Set ผ่านการตรวจว่ามี Sysmon Event แล้ว
+แต่ยังต้องเทียบกับคำสั่งใน Adversary View ตามหัวข้อ~\ref{sec:case-prep} จำนวนกรณีจริงจึงอาจลดลง
+
+หากในอนาคตพบชุดข้อมูลเพิ่มเติม เช่น ชุดข้อมูลใหม่ใน Repository ของ Splunk หรือ OTRF หรือจากแหล่งอื่น
+จะพิจารณานำมาใช้โดยผ่านเกณฑ์ชุดเดียวกันในตารางที่~\ref{tab:technique-funnel}
+และบันทึก Commit ที่ใช้ใหม่ ทั้งนี้ชุดข้อมูลที่เพิ่มหลังจากล็อกค่าการทดลองแล้ว
+จะรายงานเป็นการประเมินเพิ่มเติมแยกจากผลหลัก เพื่อไม่ให้กระทบความเป็นกลางของ Test Set
 
 \subsection{รูปแบบ Logs ดิบ}
 แม้ใช้เฉพาะ Windows Sysmon แต่ Logs ดิบยังมี 3 รูปแบบ (ตารางที่~\ref{tab:raw-formats})
@@ -233,8 +269,9 @@ App ที่ใช้แสดงในตารางที่~\ref{tab:splunk
         และ Test Set ตรวจจาก Rule ที่คู่กับชุดข้อมูลเทียบกับ Adversary View
 \end{enumerate}
 
-ใน Development Set มี 20 จาก 23 เทคนิคที่มี Rule ประเภท TTP หรือ Anomaly อย่างน้อย 1 Rule
+ใน Development Set จาก 23 เทคนิคที่ตรวจสอบแล้ว มี 20 เทคนิคที่มี Rule ประเภท TTP หรือ Anomaly อย่างน้อย 1 Rule
 ที่ทดสอบกับชุดข้อมูลนั้น ส่วนอีก 3 เทคนิค (T1550.002, T1562.004 และ T1574.001) คาดว่าต้องใช้ Anchor สำรอง
+และ T1059.001 ที่เพิ่มเข้ามาภายหลังยังต้องตรวจสอบ
 ในการทดลองรอบนี้ใช้ Alert ที่เป็น True Positive 1 รายการต่อไฟล์ ส่วน False Positive นับไว้เพื่อรายงานเท่านั้น
 การเลือกหรือจัดกลุ่ม Alert เมื่อมีหลายรายการเป็นประเด็นที่จะศึกษาต่อ
 ข้อมูลที่ส่งให้ LLM คือ Event ที่ทำให้เกิด Alert โดยตัดชื่อ Rule และป้ายกำกับ ATT\&CK ออก
@@ -247,11 +284,12 @@ App ที่ใช้แสดงในตารางที่~\ref{tab:splunk
 \begin{enumerate}
   \item \textbf{Freeze} -- ระบุ Commit ของทุก Repository และบันทึก Checksum ของทุกไฟล์
   \item \textbf{Normalize} -- แปลง Logs ทั้ง 3 รูปแบบเป็น JSON ตามโครงสร้าง CIM
-  \item \textbf{Screening} -- ไฟล์ของ Splunk ต้องมี EID 1 และร่องรอยการรัน Atomic Red Team
-        ส่วนชุดของ OTRF ต้องมี EID 1 ที่ตรงกับคำสั่งใน Adversary View และทบทวนชุดที่ป้ายกำกับน่าสงสัย
+  \item \textbf{Screening} -- ตรวจว่าไฟล์ของทั้งสองแหล่งมี Sysmon Event ที่เกี่ยวข้องกับคำสั่งโจมตี
+        (ไม่จำเป็นต้องเป็น EID 1) โดยไฟล์ของ Splunk ตรวจเทียบกับคำสั่งของชุดทดสอบ Atomic Red Team
+        ส่วนชุดของ OTRF ตรวจเทียบกับคำสั่งใน Adversary View และทบทวนชุดที่ป้ายกำกับน่าสงสัย
   \item \textbf{สร้าง Alert} -- ตามหัวข้อ~\ref{sec:alert}
   \item \textbf{สร้างกรณีทดสอบ} -- 1 Alert ที่เป็น True Positive = 1 กรณี
-        ไฟล์ที่ไม่มี Alert ใช้ EID 1 ของคำสั่งโจมตีเป็น Anchor สำรองและติดธงแยกไว้
+        ไฟล์ที่ไม่มี Alert ใช้ Event ของคำสั่งโจมตี (EID 1 หรือ Event ที่ตรงกับ Adversary View) เป็น Anchor สำรองและติดธงแยกไว้
   \item \textbf{Leak Check} -- ตัดชื่อ Rule ป้ายกำกับ ATT\&CK และข้อความรูปแบบ \texttt{T\#\#\#\#} ออกจากทุก Prompt
 \end{enumerate}
 
@@ -285,9 +323,13 @@ Raw Logs จากแต่ละแหล่งมีรูปแบบต่�
 
 Event Selection ตอบคำถามว่า \emph{``จะส่งเหตุการณ์ใดให้ LLM''}
 ซึ่งเป็นขั้นตอนที่ยากที่สุดของ Pipeline เพราะต้องคัดเลือกให้ได้หลักฐานครบ แต่ไม่มี Noise มากเกินไป
-โครงงานเสนอวิธี Event Selection 5 วิธีเพื่อนำมาเปรียบเทียบ (รูปที่~\ref{fig:es-methods} และตารางที่~\ref{tab:es-methods})
+โครงงานเปรียบเทียบวิธี Event Selection 5 วิธี โดย 4 วิธีแรกเป็นแนวทางพื้นฐาน
+และวิธีที่ 5 (Top-$k$ Relevant Events) เป็นวิธีที่โครงงานนำเสนอ
 
-\begin{figure}[ht]
+\subsection{วิธี Event Selection ที่นำมาเปรียบเทียบ}
+แนวคิดของแต่ละวิธีแสดงในรูปที่~\ref{fig:es-methods} และข้อดีข้อเสียสรุปในตารางที่~\ref{tab:es-methods}
+
+\begin{figure}[htbp]
   \centering
   \includegraphics[width=\textwidth]{event_selection_methods.png}
   \caption{แนวคิดของวิธี Event Selection แบบที่ 1--4 (แถบสีเขียวคือ Event ที่ถูกเลือก)}
@@ -304,9 +346,9 @@ Event Selection ตอบคำถามว่า \emph{``จะส่งเห�
         แล้วเลือกเฉพาะ Events ที่มีคะแนนสูงสุดภายใต้งบประมาณ Token
 \end{enumerate}
 
-\begin{table}[ht]
+\begin{table}[htbp]
   \centering
-  \caption{ข้อดีและข้อเสียของวิธี Event Selection แต่ละแบบ}
+  \caption{ข้อดีและข้อเสียของวิธ Event Selection แต่ละแบบ}
   \label{tab:es-methods}
   \begin{tabular}{|L{0.16\textwidth}|L{0.36\textwidth}|L{0.36\textwidth}|}
     \hline
@@ -329,12 +371,17 @@ Event Selection ตอบคำถามว่า \emph{``จะส่งเห�
   \end{tabular}
 \end{table}
 
+\FloatBarrier
+
+\subsection{วิธีที่เสนอ: Top-$k$ Relevant Events}
 จากตัวอย่าง T1087.001 เมื่อกำหนดให้ Alert ชี้ที่ Process \texttt{net.exe} (คำสั่ง \texttt{net users})
 และใช้วิธี Multiple Related เพื่อดึง Process ที่เกี่ยวข้อง (ผู้ใช้ที่รัน, Parent และ Child Process)
 พร้อม Events ที่ Process เหล่านั้นเป็นเจ้าของ จำนวน Events ลดลงจาก 11,090 เหลือ 177 events
-วิธี Top-$k$ Relevant Events ซึ่งเป็นวิธีที่โครงงานนำเสนอ ต่อยอดจากแนวคิดนี้โดยแบ่งเป็น 4 ขั้นตอนย่อย ดังนี้
+แต่จำนวน Events ที่ได้ยังขึ้นกับขนาดของ Process Tree และไม่มีการจัดลำดับความสำคัญ
+วิธี Top-$k$ Relevant Events จึงต่อยอดจากแนวคิดนี้โดยให้คะแนนแต่ละ Event และคัดเลือกภายใต้งบประมาณ Token
+แบ่งเป็น 4 ขั้นตอนย่อย ได้แก่ Graph, Traverse, Score และ Budget ดังหัวข้อถัดไป
 
-\subsection{Graph: สร้างกราฟความสัมพันธ์ของ Process}
+\subsection{Top-$k$ ขั้นที่ 1 -- Graph: สร้างกราฟความสัมพันธ์ของ Process}
 สร้างกราฟความสัมพันธ์ระหว่าง Process และ Event โดยมีโหนดเป็น Process (ระบุด้วย ProcessGuid)
 และเส้นเชื่อม 3 ประเภท ดังตารางที่~\ref{tab:graph-edges}
 ทุก Event ถูกแนบกับโหนดของ Process เจ้าของ เมื่อการท่องกราฟไปถึงโหนดใดจะได้ Events ทั้งหมดของโหนดนั้น
@@ -358,7 +405,7 @@ Event Selection ตอบคำถามว่า \emph{``จะส่งเห�
 Process Access (EID 10) ไม่ถูกใช้เป็นเส้นทางเดิน เนื่องจากมีสัดส่วนสูงใน Logs และส่วนใหญ่เป็นกิจกรรมปกติของระบบปฏิบัติการ
 แต่จะถูกแนบเป็น Candidate ของโหนดที่เดินถึงแล้ว เพื่อให้ยังเห็นพฤติกรรมสำคัญ เช่น การเข้าถึงหน่วยความจำของ \texttt{lsass.exe}
 
-\subsection{Traverse: ท่องกราฟจากจุดที่ Alert ชี้}
+\subsection{Top-$k$ ขั้นที่ 2 -- Traverse: ท่องกราฟจากจุดที่ Alert ชี้}
 เริ่มจาก Process ที่ Alert ชี้ (Anchor) แล้วขยายไปยัง Parent และ Child Process
 โดยเก็บเฉพาะบรรพบุรุษและลูกหลานโดยตรงที่อยู่ในระยะที่กำหนด
 เพื่อให้ได้ Candidate Events ที่เกี่ยวข้องกับ Alert โดยไม่ลามไปทั้งระบบ ตามกฎดังนี้
@@ -379,7 +426,21 @@ Process Access (EID 10) ไม่ถูกใช้เป็นเส้นท�
   \label{fig:traverse}
 \end{figure}
 
-\subsection{Score: ให้คะแนนความเกี่ยวข้อง}
+การท่องกราฟขึ้นกับว่า Anchor มีสายความสัมพันธ์ของ Process (Lineage) หรือไม่ ซึ่งแบ่งได้เป็น 3 กรณี
+\begin{enumerate}
+  \item[A.] Anchor เป็น EID 1 และมี Lineage (เช่น \texttt{net.exe} ในกรณีนำร่อง) -- ท่องกราฟได้ตามปกติ
+  \item[B.] Anchor ไม่ใช่ EID 1 แต่ Process เจ้าของมี EID 1 (เช่น Alert ชี้ EID 13 ของ \texttt{reg.exe})
+        -- หาโหนดจาก ProcessGuid แล้วท่องกราฟต่อได้
+  \item[C.] Process ของ Anchor ไม่มี EID 1 หรือทั้งไฟล์ไม่มี EID 1
+        -- ไม่มีเส้น Parent--Child ให้เดินต่อ ได้เพียง Events ของ Process เดียวและ Events ที่แนบผ่าน EID 10
+\end{enumerate}
+สำหรับกรณี C จะกำหนดกติกาสำรองก่อนการปรับพารามิเตอร์ แนวทางที่พิจารณาคือ
+เพิ่ม Events ในช่วงเวลา $\pm T$ บนเครื่องเดียวกันเป็น Candidate โดยกำหนดระยะเท่ากับจำนวน Hop สูงสุดบวกหนึ่ง
+Events เหล่านี้จึงได้คะแนนต่ำกว่า Events ที่เชื่อมกันจริงเสมอ แต่ยังใช้เติมงบประมาณได้
+ทุกกรณีทดสอบจะบันทึกว่าอยู่ในกรณี A, B หรือ C และรายงานผลแยกกลุ่ม
+เพื่อแสดงว่าวิธี Top-$k$ ทำงานได้แย่ลงเพียงใดเมื่อไม่มี Lineage
+
+\subsection{Top-$k$ ขั้นที่ 3 -- Score: ให้คะแนนความเกี่ยวข้อง}
 ประเมินและจัดลำดับความเกี่ยวข้องของแต่ละ Candidate Event $e$ ด้วยผลคูณของ 3 ปัจจัย ดังสมการ~\eqref{eq:score}
 
 \begin{equation}\label{eq:score}
@@ -399,6 +460,14 @@ $\Delta t$ คือเวลาที่ห่างจาก Alert (วิน�
 ค่าพารามิเตอร์ที่ใช้ในปัจจุบันแสดงในตารางที่~\ref{tab:score-param}
 ซึ่งยังเป็นค่าตั้งต้นที่ต้องปรับจูนในการทดลองขั้นต่อไป
 ตัวอย่างการคำนวณคะแนนแสดงในตารางที่~\ref{tab:score-example}
+
+สมการ~\eqref{eq:score} เป็นต้นแบบ (Prototype) ของฟังก์ชันให้คะแนน ไม่ใช่รูปแบบสุดท้าย
+การรวมปัจจัยแบบผลคูณทำให้ Event ที่มีปัจจัยใดปัจจัยหนึ่งต่ำได้คะแนนต่ำโดยรวม
+ในขั้นต่อไปคณะผู้จัดทำจะทดลองเปรียบเทียบรูปแบบอื่นบน Development Set
+เช่น การรวมแบบผลรวมถ่วงน้ำหนัก (Weighted Sum) การตัดปัจจัยใดปัจจัยหนึ่งออกเพื่อดูผลของแต่ละปัจจัย (Ablation)
+และวิธีนับระยะของ Events ที่แนบผ่าน Process Access
+โดยใช้ Evidence Recall และความถูกต้องของ LLM บน Development Set เป็นเกณฑ์เลือก
+ก่อนล็อกค่าและนำไปใช้กับ Test Set
 
 \begin{table}[ht]
   \centering
@@ -429,7 +498,7 @@ $\Delta t$ คือเวลาที่ห่างจาก Alert (วิน�
   \end{tabular}
 \end{table}
 
-\subsection{Budget: คัดเลือกภายใต้งบประมาณ Token}
+\subsection{Top-$k$ ขั้นที่ 4 -- Budget: คัดเลือกภายใต้งบประมาณ Token}
 เพื่อจำกัดจำนวน Token ให้พอดีกับ Context Window ของโมเดล และให้ LLM เห็นเฉพาะ Events ที่สำคัญที่สุดก่อน
 ขั้นตอน Budget ทำงาน 3 ข้อ ดังนี้
 \begin{enumerate}
@@ -523,9 +592,9 @@ $\rightarrow$ ระบุ Sub-technique ที่ตรงกับรูปแ
 นอกจากนี้ยังมีเมนูสำหรับผู้ดูแลระบบ เช่น การเชื่อมต่อ SIEM การตั้งค่า Pipeline
 และการปรับปรุงข้อมูล/ฐานความรู้ ซึ่งกำหนดให้ผู้ดูแลระบบเป็นผู้สั่งปรับปรุงเท่านั้น
 
-\begin{figure}[ht]
+\begin{figure}[htbp]
   \centering
-  \includegraphics[width=0.95\textwidth]{dashboard_prototype.png}
+  \includegraphics[width=0.8\textwidth]{dashboard_prototype.png}
   \caption{ต้นแบบหน้า Inbox ของ Web Dashboard}
   \label{fig:dashboard}
 \end{figure}
