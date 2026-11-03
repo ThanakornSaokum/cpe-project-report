@@ -112,7 +112,7 @@ Normalize Logs ให้อยู่ในรูปแบบมาตรฐา�
           ขนาดเล็กที่ทำงานภายในเครื่องคอมพิวเตอร์ส่วนบุคคล ในการระบุ Technique และ Sub-technique
           ตาม MITRE ATT\&CK เมื่อเทียบกับการใช้ Raw Logs
 
-    \item เพื่อลดปริมาณข้อมูล และ Noise ที่ส่งให้ LLM เพื่อลดจำนวน Token ที่ใช้งาน โดยคง Event ที่จำเป็นต่อการวิเคราะห์ไว้
+    \item เพื่อลดปริมาณข้อมูล (จำนวน Token) ที่ส่งให้ LLM โดยยังคง Event ที่จำเป็นต่อการวิเคราะห์ไว้
 
     \item เพื่อพัฒนาต้นแบบ Web Dashboard สำหรับนำเสนอผลการวิเคราะห์
           ในรูปแบบรายงานการสืบสวน (Investigation Report)
@@ -281,23 +281,23 @@ Normalize Logs ให้อยู่ในรูปแบบมาตรฐา�
 %           Splunk Add-on for Microsoft Windows และ ES Content Update (ESCU)
 %           สำหรับสร้าง Alert จาก Detection Rule
 
-    \item \textbf{Ollama}~\cite{ollama} -- เครื่องมือสำหรับรัน
-          LLM และ Embedding Model ภายในเครื่อง
-
     \item \textbf{Qwen3.5:9B} -- LLM ที่ใช้วิเคราะห์ Investigation Context
 
-    \item \textbf{qwen3-embedding:0.6b} -- Embedding Model สำหรับแปลงฐานความรู้และ Query เป็นเวกเตอร์ใน RAG
+    \item \textbf{Ollama}~\cite{ollama} -- เครื่องมือสำหรับรัน
+          LLM และ Embedding Model ภายในเครื่อง
 
     \item \textbf{Hermes} -- เครื่องมือสำหรับจัดการ Prompt
           และการเรียกใช้งานโมเดล (Model Invocation)
 
-    \item \textbf{Python} -- ภาษาหลักที่ใช้พัฒนา Pipeline
-          ได้แก่ การ Parse และ Normalize Logs, Event Selection,
-          Representation, RAG และการประเมินผล
+    \item \textbf{qwen3-embedding:0.6b} -- Embedding Model สำหรับแปลงฐานความรู้และ Query เป็นเวกเตอร์ใน RAG
 
     \item \textbf{MITRE ATT\&CK Enterprise v19.2 (STIX)}
           -- ฐานความรู้เกี่ยวกับเทคนิคการโจมตีที่ใช้สร้าง
           Knowledge Base สำหรับ RAG
+
+    \item \textbf{Python} -- ภาษาหลักที่ใช้พัฒนา Pipeline
+          ได้แก่ การ Parse และ Normalize Logs, Event Selection,
+          Representation, RAG และการประเมินผล
 
     \item \textbf{React (TypeScript) และ Vite} -- เทคโนโลยีที่ใช้พัฒนาส่วนหน้า (Frontend) ของ Web Dashboard
 

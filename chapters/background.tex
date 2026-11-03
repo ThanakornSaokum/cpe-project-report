@@ -224,6 +224,8 @@ Parent สร้าง Child (Sysmon EID 1) และ Process หนึ่งส
         \mathrm{hit@}k = \frac{1}{N}\sum_{i=1}^{N} \mathbf{1}\left[y_i \in R_k(q_i)\right]
         \end{equation}
         โดยที่ $R_k(q_i)$ คือรายการเทคนิค $k$ อันดับแรกที่ค้นคืนได้จาก Query $q_i$
+        นอกจากนี้จะรายงานอันดับของเทคนิคเฉลยในรายการที่ค้นคืนได้ (Rank)
+        เพื่อดูว่าเฉลยอยู่ใกล้อันดับต้นเพียงใด
 
   \item \textbf{Evidence Recall} -- สัดส่วนของ Events ที่เป็นการโจมตี (ตาม Ground Truth ระดับ Event)
         ที่ยังคงอยู่หลังขั้นตอน Event Selection วัดเฉพาะใน Development Set
@@ -236,7 +238,36 @@ Parent สร้าง Child (Sysmon EID 1) และ Process หนึ่งส
         และสัดส่วนจำนวน Events ที่ถูกคัดเลือกต่อ Events ทั้งหมด
 
   \item \textbf{Latency} -- เวลาตั้งแต่รับ Logs จนได้คำตอบ (End-to-end)
+
+  \item \textbf{Confusion Matrix ของ Alert} -- ใช้อธิบายคุณภาพของ Alert ที่ได้จาก Detection Rule
+        ซึ่งเป็น Input ของระบบ ไม่ได้ใช้วัดความถูกต้องของ LLM
+        โดยแบ่งผลเป็น 4 กลุ่มดังตารางที่~\ref{tab:alert-confusion}
 \end{itemize}
+
+\begin{table}[ht]
+  \centering
+  \caption{Confusion Matrix ของ Alert}
+  \label{tab:alert-confusion}
+  \small
+  \begin{tabular}{|l|L{0.33\textwidth}|L{0.33\textwidth}|}
+    \hline
+     & \textbf{เป็นการโจมตีจริง} & \textbf{ไม่ใช่การโจมตี} \\ \hline
+    \textbf{มี Alert} & True Positive (TP) -- Rule แจ้งเตือนที่ Event ของการโจมตี
+                     & False Positive (FP) -- Rule แจ้งเตือนที่ Event ปกติ \\ \hline
+    \textbf{ไม่มี Alert} & False Negative (FN) -- มีการโจมตีแต่ไม่มี Rule แจ้งเตือน
+                        & True Negative (TN) -- Event ปกติที่ไม่มี Rule แจ้งเตือน \\ \hline
+  \end{tabular}
+\end{table}
+
+โครงงานรายงานเฉพาะจำนวน TP, FP และ FN ส่วน TN คือ Event ปกติเกือบทั้งไฟล์
+ซึ่งมีจำนวนสูงมากจึงไม่นำมาตีความ กรณีทดสอบสร้างจาก Alert ที่เป็น TP เท่านั้น
+ส่วนไฟล์ที่เป็น FN (ไม่มี Alert) จะใช้ Anchor สำรองตามหัวข้อที่~\ref{sec:case-prep}
+
+ตัวชี้วัดข้างต้นไม่ได้ใช้ตอบทุกคำถามพร้อมกัน แต่แบ่งบทบาทดังนี้
+\textbf{ตัวชี้วัดหลัก} คือ Exact Match และ Parent Match Accuracy
+\textbf{ตัวชี้วัดเสริม} คือ hit@$k$, Evidence Recall, Token Cost และ Latency
+และ\textbf{ข้อมูลประกอบ} คือ Confusion Matrix ของ Alert
+การจับคู่ตัวชี้วัดกับวัตถุประสงค์แต่ละข้อแสดงในตารางที่~\ref{tab:exp-metrics}
 
 เนื่องจากจำนวนกรณีทดสอบมีจำกัด ค่าความถูกต้องจะรายงานพร้อมช่วงความเชื่อมั่น 95\%
 ด้วยวิธี Bootstrap~\cite{efron1979} และเปรียบเทียบแต่ละรูปแบบการทดลองกับ Baseline
