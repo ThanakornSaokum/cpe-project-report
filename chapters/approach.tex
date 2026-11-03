@@ -1,3 +1,6 @@
+% หัวข้อย่อย i--iv ของ Top-k (ตัวหนา ไม่มีเลขหัวข้อ)
+\providecommand{\topkstep}[1]{\par\medskip\noindent\phantomsection\textbf{#1}\par\nopagebreak\smallskip}
+
 \chapter{\ifproject%
 \ifenglish Project Structure and Methodology\else โครงสร้างและขั้นตอนการทำงาน\fi
 \else%
@@ -5,9 +8,9 @@
 \fi
 }
 
-ในบทนี้จะกล่าวถึงภาพรวมของระบบ หลักการ และการออกแบบแต่ละขั้นตอนของ Context Construction Pipeline
-ตั้งแต่การรับ Alert และ Raw Logs จาก SIEM จนถึงการสร้างรายงานการสืบสวน
-รวมถึงชุดข้อมูล การสร้าง Alert และการเตรียมกรณีทดสอบที่ใช้ในการทดลอง
+ในบทนี้จะกล่าวถึงภาพรวมของระบบ ชุดข้อมูล การสร้าง Alert และการเตรียมกรณีทดสอบที่ใช้ในการทดลอง
+จากนั้นอธิบายการทำงานของ Context Construction Pipeline ทีละขั้นตอน
+ตั้งแต่การรับ Alert และ Raw Logs จนถึงการสร้างรายงานการสืบสวน และปิดท้ายด้วยต้นแบบ Web Dashboard
 โดยใช้ชุดข้อมูล Account Discovery: Local Account (T1087.001) จาก Splunk Attack Data เป็นตัวอย่างประกอบ
 
 \section{ภาพรวมของระบบ}
@@ -16,6 +19,7 @@
 \textbf{Input} (Alert และ Raw Logs),
 \textbf{Context Construction Pipeline} (Normalize, Event Selection, Representation),
 \textbf{Analysis} (RAG และ LLM Analysis) และ \textbf{Output} (Investigation Report)
+หมายเลข 1--6 ในรูปคือลำดับขั้นตอนของ Pipeline ซึ่งอธิบายตามลำดับในหัวข้อที่~\ref{sec:step-input}--\ref{sec:step-llm}
 
 \begin{figure}[ht]
 \centering
@@ -25,14 +29,16 @@
   box/.style={draw, rounded corners=2pt, fill=white, align=center,
               minimum width=23mm, minimum height=13mm, font=\small},
   arr/.style={-{Latex[length=2.5mm]}, very thick, blue!50!black},
-  grp/.style={draw, dashed, rounded corners=8pt, gray, inner sep=3mm}]
+  grp/.style={draw, dashed, rounded corners=8pt, gray, inner sep=3mm},
+  stepno/.style={circle, fill=blue!50!black, text=white, font=\scriptsize\bfseries,
+               inner sep=0pt, minimum size=4mm}]
   \node[box] (alert) {Alert/EDR\\[-1pt]{\scriptsize ตรวจพบความผิดปกติ}};
-  \node[box, below=of alert] (raw) {Raw Log\\[-1pt]{\scriptsize นำ Log จาก SIEM}};
-  \node[box, right=12mm of raw] (norm) {Normalize\\[-1pt]{\scriptsize CIM standard}};
-  \node[box, right=of norm] (sel) {Event Selection\\[-1pt]{\scriptsize คัด Event สำคัญ}};
-  \node[box, right=of sel] (rep) {Representation\\[-1pt]{\scriptsize JSON / TOON}};
-  \node[box, right=12mm of rep] (llm) {LLM Analysis\\[-1pt]{\scriptsize ระบุ Technique}};
-  \node[box, above=of llm] (rag) {RAG\\[-1pt]{\scriptsize ดึง Top-$k$ MITRE}};
+  \node[box, below=of alert, label={[stepno]north west:1}] (raw) {Raw Log\\[-1pt]{\scriptsize ไฟล์ Logs}};
+  \node[box, right=12mm of raw, label={[stepno]north west:2}] (norm) {Normalize\\[-1pt]{\scriptsize Field ร่วม (CIM)}};
+  \node[box, right=of norm, label={[stepno]north west:3}] (sel) {Event Selection\\[-1pt]{\scriptsize คัด Event สำคัญ}};
+  \node[box, right=of sel, label={[stepno]north west:4}] (rep) {Representation\\[-1pt]{\scriptsize JSON / TOON}};
+  \node[box, right=12mm of rep, label={[stepno]north west:6}] (llm) {LLM Analysis\\[-1pt]{\scriptsize ระบุ Technique}};
+  \node[box, above=of llm, label={[stepno]north west:5}] (rag) {RAG\\[-1pt]{\scriptsize ดึง Top-$k$ MITRE}};
   \node[box, right=12mm of llm] (out) {Output\\[-1pt]{\scriptsize Report}};
   \draw[arr] (alert) -- (raw);
   \draw[arr] (raw) -- (norm);
@@ -49,7 +55,7 @@
     \node[grp, fit=(out), label={[gray]above:Output}] {};
   \end{scope}
 \end{tikzpicture}}
-\caption{ภาพรวมของระบบและ Context Construction Pipeline}
+\caption{ภาพรวมของระบบและ Context Construction Pipeline (หมายเลข 1--6 คือลำดับขั้นตอนในหัวข้อที่~\ref{sec:pipeline})}
 \label{fig:overview}
 \end{figure}
 
@@ -64,33 +70,42 @@ Input และ Output ของแต่ละขั้นตอนสรุป
   \centering
   \caption{Input และ Output ของแต่ละขั้นตอนใน Pipeline}
   \label{tab:pipeline-io}
-  \begin{tabular}{|l|l|l|}
+  \small
+  \begin{tabular}{|L{0.27\textwidth}|L{0.30\textwidth}|L{0.33\textwidth}|}
     \hline
     \textbf{ขั้นตอน} & \textbf{Input} & \textbf{Output} \\ \hline
-    Raw Log        & Alert และคำค้นไปยัง SIEM            & Raw Logs (XML/JSON) \\ \hline
-    Normalize      & Windows/Linux Raw Logs               & JSON ตามโครงสร้าง Field ร่วม (CIM) \\ \hline
-    Event Selection & JSON Logs + Alert                   & Selected JSON Logs \\ \hline
-    Representation & Selected JSON Logs                   & Representation Log \\ \hline
-    RAG            & Query จาก Representation Log         & Top-$k$ Techniques (Context) \\ \hline
-    LLM Analysis   & Context + Representation Log         & Attack Technique พร้อมหลักฐาน \\ \hline
-    Output         & ผลการวิเคราะห์ของ LLM                 & Investigation Report \\ \hline
+    1. รับ Alert และ Raw Logs & ไฟล์ Raw Logs + Alert (Anchor)  & Events ของกรณีทดสอบ (เรียงตามเวลา) \\ \hline
+    2. Normalize      & Windows/Linux Raw Logs               & JSON ตามโครงสร้าง Field ร่วม \\ \hline
+    3. Event Selection & JSON Logs + Alert                   & Selected JSON Logs \\ \hline
+    4. Representation & Selected JSON Logs                   & Representation Log \\ \hline
+    5. RAG            & Query จาก Representation Log         & Top-$k$ Techniques (Context) \\ \hline
+    6. LLM Analysis   & Context + Representation Log         & Attack Technique พร้อมหลักฐาน \\ \hline
+    \phantom{6. }Output & ผลการวิเคราะห์ของ LLM                 & Investigation Report \\ \hline
   \end{tabular}
 \end{table}
 
 \section{ชุดข้อมูล}
 \label{sec:dataset}
 
+โครงงานไม่ได้จำลองการโจมตีหรือเก็บ Logs ขึ้นเอง แต่ใช้ชุดข้อมูลสาธารณะที่มีผู้บันทึกไว้แล้ว 2 แหล่ง
+คือ Splunk Attack Data~\cite{splunk-attack-data} และ OTRF Security-Datasets~\cite{otrf-security-datasets}
+ทุกชุดข้อมูลที่ใช้ยึดหลัก \textbf{1 Scenario = 1 เทคนิค} ตามนิยามในหัวข้อที่~\ref{sec:scenario-def}
+กล่าวคือ Logs หนึ่งชุดบันทึกการโจมตีเพียงเทคนิคเดียว และเทคนิคนั้นเป็นเฉลยของ Scenario
+
 \subsection{การคัดเลือกเทคนิค}
 ก่อนอธิบายเกณฑ์ ขอนิยามคำที่ใช้ในหัวข้อนี้ดังนี้
 \begin{itemize}
-  \item \textbf{Windows Atomic (OTRF)} -- ชุดข้อมูลของ OTRF ที่บันทึกจากเครื่อง Windows
-        และจำลองพฤติกรรมการโจมตีเพียงพฤติกรรมเดียว ต่างจากชุดแบบ Compound ที่จำลองทั้ง Campaign
-        และมีหลายเทคนิคปนกัน (เช่น การจำลองกลุ่ม APT29)
+  \item \textbf{Windows Atomic (OTRF)} -- ชุดข้อมูลหมวด Atomic ของ OTRF ที่บันทึกจากเครื่อง Windows
+        โดย 1 ชุดจำลองการโจมตีเพียง 1 เทคนิค ตรงกับหลัก 1 Scenario = 1 เทคนิค
+        ส่วน OTRF หมวด Compound จำลองทั้ง Campaign ที่มีหลายเทคนิคต่อเนื่องกัน (เช่น การจำลองกลุ่ม APT29)
+        ซึ่งไม่ตรงกับหลักดังกล่าว โครงงานจึง\textbf{ไม่ใช้}ชุดข้อมูลหมวด Compound
   \item \textbf{Atomic Red Team (ART)}~\cite{atomic-red-team} -- คลังชุดทดสอบการโจมตีแบบโอเพนซอร์สของ Red Canary
         แยกตามเทคนิค ATT\&CK โดยแต่ละชุดทดสอบเขียนคำสั่งที่ใช้โจมตีไว้ชัดเจนในไฟล์ YAML
         และรันผ่านคำสั่ง PowerShell \texttt{Invoke-AtomicTest}
+        (คำว่า Atomic ในชื่อเครื่องมือหมายถึงชุดทดสอบขนาดเล็กที่ทดสอบทีละเทคนิค)
   \item \textbf{ชุดข้อมูล ART ของ Splunk} -- ชุดข้อมูลในโฟลเดอร์ \texttt{atomic\_red\_team} ของ Splunk Attack Data
-        ซึ่งบันทึก Logs ขณะรัน Atomic Red Team ใน Lab ที่สร้างด้วย attack\_range
+        ซึ่งทีมของ Splunk เป็นผู้รัน Atomic Red Team ใน Lab ที่สร้างด้วย attack\_range และบันทึก Logs ไว้
+        โดยแต่ละโฟลเดอร์เป็นของเทคนิคเดียว
 \end{itemize}
 
 เหตุผลที่เลือกเฉพาะชุดข้อมูล ART ของ Splunk เป็น Development Set คือ
@@ -234,16 +249,17 @@ Input และ Output ของแต่ละขั้นตอนสรุป
 \section{การสร้าง Alert}
 \label{sec:alert}
 
-เพื่อให้จุดเริ่มต้นของการสืบสวนใกล้เคียงการใช้งานจริง Alert ในการทดลองสร้างจาก Detection Rule ทางการของ Splunk (ESCU)~\cite{splunk-escu}
-แทนการกำหนดเอง ESCU ติดตั้งเป็น App เดียวและได้ Rule ทั้งหมดในครั้งเดียว
-App ที่ใช้แสดงในตารางที่~\ref{tab:splunk-apps}
+เพื่อให้จุดเริ่มต้นของการสืบสวนใกล้เคียงการใช้งานจริง
+แนวทางการสร้าง Alert ของโครงงานคือใช้ Detection Rule ทางการจาก ES Content Update (ESCU)~\cite{splunk-escu}
+แทนการกำหนดเงื่อนไขขึ้นเอง ESCU รวม Rule ทั้งหมดไว้ใน App เดียว
+และต้องใช้ร่วมกับ App ที่แปลงข้อมูลให้อยู่ในรูปแบบที่ Rule อ่านได้ ดังตารางที่~\ref{tab:splunk-apps}
 จาก Rule ที่ใช้งานได้ทั้งหมด 2,078 Rule มี 928 Rule ที่ใช้ Windows Sysmon
 แบ่งเป็นประเภท TTP 484 Rule, Anomaly 345 Rule และ Hunting 99 Rule
 โครงงานใช้ประเภท TTP และ Anomaly รวม 829 Rule เนื่องจาก Hunting ไม่สร้าง Alert
 
 \begin{table}[ht]
   \centering
-  \caption{Splunk และ App ที่ใช้สร้าง Alert}
+  \caption{App ที่ใช้ร่วมกับ Rule ของ ESCU}
   \label{tab:splunk-apps}
   \small
   \begin{tabular}{|l|c|c|}
@@ -253,30 +269,32 @@ App ที่ใช้แสดงในตารางที่~\ref{tab:splunk
     Splunk Add-on for Sysmon & 5709 & 5.0.0 \\ \hline
     Splunk Add-on for Microsoft Windows & 742 & 10.0.1 \\ \hline
     ES Content Update (ESCU) & 3449 & 6.10.0 \\ \hline
-    Splunk Enterprise (Docker Image \texttt{splunk/splunk}) & -- & 9.3 \\ \hline
   \end{tabular}
 \end{table}
 
-ขั้นตอนการสร้าง Alert มีดังนี้
+แนวทางการสร้าง Alert มีดังนี้
 \begin{enumerate}
-  \item ติดตั้ง App ทั้ง 4 ตัวบน Splunk Enterprise 9.3 ใน Docker (ใช้ License แบบ Trial หรือ Developer
-        เนื่องจาก Splunk Free ไม่รองรับ Alert และ Scheduled Search)
-  \item แปลงชุดข้อมูล OTRF จาก JSON เป็น Sysmon XML ก่อน Replay
+  \item แปลงชุดข้อมูล OTRF จาก JSON เป็น Sysmon XML
         เนื่องจาก Splunk Add-on for Sysmon อ่านเฉพาะรูปแบบ XmlWinEventLog
-  \item Replay Logs เข้า Splunk ทีละไฟล์ แล้วสั่งรัน Rule ทั้ง 829 Rule ผ่าน REST API
+  \item นำ Logs เข้าระบบทีละไฟล์ แล้วรัน Rule ทั้ง 829 Rule
         เพื่อให้ทราบว่า Alert แต่ละรายการมาจากไฟล์ใด
   \item ระบุว่า Alert เป็น True Positive หรือ False Positive
         โดย Development Set ตรวจจาก Process Tree ของ Atomic Red Team
         และ Test Set ตรวจจาก Rule ที่คู่กับชุดข้อมูลเทียบกับ Adversary View
 \end{enumerate}
 
-ใน Development Set จาก 23 เทคนิคที่ตรวจสอบแล้ว มี 20 เทคนิคที่มี Rule ประเภท TTP หรือ Anomaly อย่างน้อย 1 Rule
-ที่ทดสอบกับชุดข้อมูลนั้น ส่วนอีก 3 เทคนิค (T1550.002, T1562.004 และ T1574.001) คาดว่าต้องใช้ Anchor สำรอง
-และ T1059.001 ที่เพิ่มเข้ามาภายหลังยังต้องตรวจสอบ
-ในการทดลองรอบนี้ใช้ Alert ที่เป็น True Positive 1 รายการต่อไฟล์ ส่วน False Positive นับไว้เพื่อรายงานเท่านั้น
+การตรวจสอบว่าแต่ละเทคนิคใน Development Set และ Test Set มี Rule ประเภท TTP หรือ Anomaly รองรับหรือไม่
+ยังไม่ได้ดำเนินการ และจะตรวจสอบเมื่อรัน Rule กับชุดข้อมูลจริงในระยะถัดไป
+เทคนิคที่ไม่มี Rule รองรับจะใช้ Anchor สำรองตามหัวข้อที่~\ref{sec:case-prep}
+
+ในการทดลองหลักจะใช้ Alert ที่เป็น True Positive 1 รายการต่อไฟล์ ส่วน False Positive นับไว้เพื่อรายงานเท่านั้น
 การเลือกหรือจัดกลุ่ม Alert เมื่อมีหลายรายการเป็นประเด็นที่จะศึกษาต่อ
 ข้อมูลที่ส่งให้ LLM คือ Event ที่ทำให้เกิด Alert โดยตัดชื่อ Rule และป้ายกำกับ ATT\&CK ออก
 เพื่อให้ LLM ต้องระบุเทคนิคจากหลักฐานเอง
+
+ในระยะ Project Survey นี้ Pipeline ยังไม่ได้เชื่อมต่อกับ SIEM โดยตรง
+Alert ของแต่ละกรณีทดสอบจึงกำหนดเป็น Event ที่ใช้เป็นจุดเริ่มต้น (Anchor) ซึ่งบันทึกไว้ในไฟล์กรณีทดสอบ
+(หัวข้อที่~\ref{sec:case-prep}) ส่วนการรับ Alert จาก SIEM โดยตรงจะพัฒนาในระยะถัดไป
 
 \section{การเตรียมกรณีทดสอบ}
 \label{sec:case-prep}
@@ -284,31 +302,43 @@ App ที่ใช้แสดงในตารางที่~\ref{tab:splunk
 ก่อนการทดลอง ชุดข้อมูลทุกชุดผ่านขั้นตอนเตรียมกรณีทดสอบ (Case) ดังนี้
 \begin{enumerate}
   \item \textbf{Freeze} -- ระบุ Commit ของทุก Repository และบันทึก Checksum ของทุกไฟล์
-  \item \textbf{Normalize} -- แปลง Logs ทั้ง 3 รูปแบบเป็น JSON ตามโครงสร้าง CIM
+  \item \textbf{Normalize} -- แปลง Logs ทั้ง 3 รูปแบบเป็น JSON ตามหัวข้อที่~\ref{sec:step-normalize}
   \item \textbf{Screening} -- ตรวจว่าไฟล์ของทั้งสองแหล่งมี Sysmon Event ที่เกี่ยวข้องกับคำสั่งโจมตี
         (ไม่จำเป็นต้องเป็น EID 1) โดยไฟล์ของ Splunk ตรวจเทียบกับคำสั่งของชุดทดสอบ Atomic Red Team
         ส่วนชุดของ OTRF ตรวจเทียบกับคำสั่งใน Adversary View และทบทวนชุดที่ป้ายกำกับน่าสงสัย
-  \item \textbf{สร้าง Alert} -- ตามหัวข้อ~\ref{sec:alert}
+  \item \textbf{สร้าง Alert} -- ตามแนวทางในหัวข้อที่~\ref{sec:alert}
   \item \textbf{สร้างกรณีทดสอบ} -- 1 Alert ที่เป็น True Positive = 1 กรณี
         ไฟล์ที่ไม่มี Alert ใช้ Event ของคำสั่งโจมตี (EID 1 หรือ Event ที่ตรงกับ Adversary View) เป็น Anchor สำรองและติดธงแยกไว้
   \item \textbf{Leak Check} -- ตัดชื่อ Rule ป้ายกำกับ ATT\&CK และข้อความรูปแบบ \texttt{T\#\#\#\#} ออกจากทุก Prompt
 \end{enumerate}
 
-\section{ขั้นตอนที่ 1: การรับ Alert และ Raw Logs จาก SIEM}
+\section{การทำงานของ Pipeline}
+\label{sec:pipeline}
 
-เมื่อมี Alert เกิดขึ้นจาก Detection Rule ใน Splunk (หัวข้อ~\ref{sec:alert})
-Pipeline จะใช้ Event ที่ Alert ชี้เป็น Anchor และดึง Logs ของไฟล์เดียวกันจาก Splunk ผ่าน REST API
-แล้วบันทึกเป็นไฟล์ JSON Lines
-สำหรับชุดข้อมูลตัวอย่าง T1087.001 ซึ่งเป็น Windows Sysmon Logs ใน Splunk
+หัวข้อนี้อธิบายการทำงานของ Context Construction Pipeline ทีละขั้นตอนตามหมายเลข 1--6 ในรูปที่~\ref{fig:overview}
+ทุกกรณีทดสอบผ่านขั้นตอนชุดเดียวกัน ต่างกันเฉพาะวิธีหรือรูปแบบที่กำหนดในแต่ละการทดลอง
+
+\subsection{ขั้นตอนที่ 1: การรับ Alert และ Raw Logs}
+\label{sec:step-input}
+
+ในระยะ Project Survey นี้ Pipeline ยังไม่ได้ดึงข้อมูลจาก SIEM โดยตรง
+แต่รับ Raw Logs เป็นไฟล์จากชุดข้อมูล (\texttt{.xml}, \texttt{.json}, \texttt{.jsonl} หรือ \texttt{.zip} ที่รวมหลายไฟล์)
+และรับ Alert จากไฟล์กรณีทดสอบ ซึ่งระบุ Event ที่ใช้เป็น Anchor (หัวข้อที่~\ref{sec:alert})
+ระบบอ่าน Logs ทุกไฟล์ของกรณีเดียวกันแล้วรวมเป็นชุด Events เดียวที่เรียงตามเวลา
+Output ของขั้นตอนนี้คือ Events ทั้งหมดของกรณีทดสอบพร้อมจำนวน Events ที่จะส่งต่อไปยังขั้นตอน Normalize
+สำหรับชุดข้อมูลตัวอย่าง T1087.001 ซึ่งเป็น Windows Sysmon Logs จาก Splunk Attack Data
 มีจำนวน 11,090 Events ในช่วงเวลาประมาณ 15 นาที (ขนาดไฟล์ XML ประมาณ 16.8 MB)
+ส่วนการเชื่อมต่อกับ SIEM เพื่อรับ Alert และดึง Logs อัตโนมัติเป็นงานที่จะพัฒนาในระยะถัดไป
 
-\section{ขั้นตอนที่ 2: Normalize}
+\subsection{ขั้นตอนที่ 2: Normalize}
+\label{sec:step-normalize}
 
-Raw Logs จากแต่ละแหล่งมีรูปแบบต่างกัน เช่น Sysmon ใน Splunk อยู่ในรูป \texttt{XmlWinEventLog}
+Raw Logs จากแต่ละแหล่งมีรูปแบบต่างกัน เช่น Sysmon ในชุดข้อมูลของ Splunk Attack Data อยู่ในรูป \texttt{XmlWinEventLog}
 และ Auditd เป็นข้อความหลาย Record ต่อเหตุการณ์
 และชุดข้อมูล OTRF อยู่ในรูป JSON 2 แบบ (ตารางที่~\ref{tab:raw-formats})
 ขั้นตอน Normalize จะ Parse Logs แล้วแปลงเป็น JSON ที่มีโครงสร้าง Field ร่วม (Common Field Structure)
-ตามชื่อ Field ของ Splunk CIM~\cite{splunk-cim} ตัวอย่าง Field ที่ใช้ เช่น \texttt{EventID}, \texttt{SystemTime}, \texttt{RecordNumber},
+ที่อิงแนวคิดของ Splunk CIM~\cite{splunk-cim} คือใช้ชื่อ Field ชุดเดียวกันไม่ว่า Logs จะมาจากแหล่งใด
+ตัวอย่าง Field ที่ใช้ เช่น \texttt{EventID}, \texttt{SystemTime}, \texttt{RecordNumber},
 \texttt{Channel}, \texttt{Image}, \texttt{CommandLine}, \texttt{ProcessGuid}, \texttt{ParentProcessGuid} และ \texttt{User}
 ดังตัวอย่างในรูปที่~\ref{fig:normalize}
 ผลลัพธ์ทำให้ขั้นตอนถัดไปทำงานกับ Logs จากทั้ง Windows และ Linux ได้ด้วยตรรกะเดียวกัน
@@ -320,14 +350,16 @@ Raw Logs จากแต่ละแหล่งมีรูปแบบต่�
   \label{fig:normalize}
 \end{figure}
 
-\section{ขั้นตอนที่ 3: Event Selection}
+\subsection{ขั้นตอนที่ 3: Event Selection}
+\label{sec:step-es}
 
 Event Selection ตอบคำถามว่า \emph{``จะส่งเหตุการณ์ใดให้ LLM''}
 ซึ่งเป็นขั้นตอนที่ยากที่สุดของ Pipeline เพราะต้องคัดเลือกให้ได้หลักฐานครบ แต่ไม่มี Noise มากเกินไป
 โครงงานเปรียบเทียบวิธี Event Selection 5 วิธี โดย 4 วิธีแรกเป็นแนวทางพื้นฐาน
 และวิธีที่ 5 (Top-$k$ Relevant Events) เป็นวิธีที่โครงงานนำเสนอ
 
-\subsection{วิธี Event Selection ที่นำมาเปรียบเทียบ}
+\subsubsection{วิธี Event Selection ที่นำมาเปรียบเทียบ}
+\label{sec:es-baselines}
 แนวคิดของแต่ละวิธีแสดงในรูปที่~\ref{fig:es-methods} และข้อดีข้อเสียสรุปในตารางที่~\ref{tab:es-methods}
 
 \begin{figure}[htbp]
@@ -374,15 +406,16 @@ Event Selection ตอบคำถามว่า \emph{``จะส่งเห�
 
 \FloatBarrier
 
-\subsection{วิธีที่เสนอ: Top-$k$ Relevant Events}
+\subsubsection{วิธีที่เสนอ: Top-$k$ Relevant Events}
+\label{sec:topk}
 จากตัวอย่าง T1087.001 เมื่อกำหนดให้ Alert ชี้ที่ Process \texttt{net.exe} (คำสั่ง \texttt{net users})
 และใช้วิธี Multiple Related เพื่อดึง Process ที่เกี่ยวข้อง (ผู้ใช้ที่รัน, Parent และ Child Process)
 พร้อม Events ที่ Process เหล่านั้นเป็นเจ้าของ จำนวน Events ลดลงจาก 11,090 เหลือ 177 Events
 แต่จำนวน Events ที่ได้ยังขึ้นกับขนาดของ Process Tree และไม่มีการจัดลำดับความสำคัญ
 วิธี Top-$k$ Relevant Events จึงต่อยอดจากแนวคิดนี้โดยให้คะแนนแต่ละ Event และคัดเลือกภายใต้งบประมาณ Token
-แบ่งเป็น 4 ขั้นตอนย่อย ได้แก่ Graph, Traverse, Score และ Budget ดังหัวข้อถัดไป
+แบ่งเป็น 4 ขั้นตอนย่อย ได้แก่ (i) Graph (ii) Traverse (iii) Score และ (iv) Budget ดังนี้
 
-\subsection{Top-$k$ ขั้นที่ 1 -- Graph: สร้างกราฟความสัมพันธ์ของ Process}
+\topkstep{i. Graph -- สร้างกราฟความสัมพันธ์ของ Process}
 สร้างกราฟความสัมพันธ์ระหว่าง Process และ Event โดยมีโหนดเป็น Process (ระบุด้วย ProcessGuid)
 และเส้นเชื่อม 3 ประเภท ดังตารางที่~\ref{tab:graph-edges}
 ทุก Event ถูกแนบกับโหนดของ Process เจ้าของ เมื่อการท่องกราฟไปถึงโหนดใดจะได้ Events ทั้งหมดของโหนดนั้น
@@ -406,7 +439,7 @@ Event Selection ตอบคำถามว่า \emph{``จะส่งเห�
 Process Access (EID 10) ไม่ถูกใช้เป็นเส้นทางเดิน เนื่องจากมีสัดส่วนสูงใน Logs และส่วนใหญ่เป็นกิจกรรมปกติของระบบปฏิบัติการ
 แต่จะถูกแนบเป็น Candidate ของโหนดที่เดินถึงแล้ว เพื่อให้ยังเห็นพฤติกรรมสำคัญ เช่น การเข้าถึงหน่วยความจำของ \texttt{lsass.exe}
 
-\subsection{Top-$k$ ขั้นที่ 2 -- Traverse: ท่องกราฟจากจุดที่ Alert ชี้}
+\topkstep{ii. Traverse -- ท่องกราฟจากจุดที่ Alert ชี้}
 \label{sec:traverse}
 เริ่มจาก Process ที่ Alert ชี้ (Anchor) แล้วขยายไปยัง Parent และ Child Process
 โดยเก็บเฉพาะบรรพบุรุษและลูกหลานโดยตรงที่อยู่ในระยะที่กำหนด
@@ -442,7 +475,12 @@ Events เหล่านี้จึงได้คะแนนต่ำกว�
 ทุกกรณีทดสอบจะบันทึกว่าอยู่ในกรณี A, B หรือ C และรายงานผลแยกกลุ่ม
 เพื่อแสดงว่าวิธี Top-$k$ ทำงานได้แย่ลงเพียงใดเมื่อไม่มี Lineage
 
-\subsection{Top-$k$ ขั้นที่ 3 -- Score: ให้คะแนนความเกี่ยวข้อง}
+\topkstep{iii. Score -- ให้คะแนนความเกี่ยวข้อง}
+\textbf{หมายเหตุ:} สมการและค่าพารามิเตอร์ในขั้นนี้เป็นต้นแบบ (Prototype) และค่าเริ่มต้น
+ที่ตั้งจากการวิเคราะห์กรณีนำร่อง T1087.001 เท่านั้น ยังไม่ใช่รูปแบบและค่าสุดท้าย
+คณะผู้จัดทำจะปรับจูนทั้งรูปแบบของสมการและค่าพารามิเตอร์บน Development Set ภายหลัง
+แล้วล็อกค่าก่อนนำไปใช้กับ Test Set
+
 ประเมินและจัดลำดับความเกี่ยวข้องของแต่ละ Candidate Event $e$ ด้วยผลคูณของ 3 ปัจจัย ดังสมการ~\eqref{eq:score}
 
 \begin{equation}\label{eq:score}
@@ -459,13 +497,11 @@ Events เหล่านี้จึงได้คะแนนต่ำกว�
 $\gamma$ คือสัดส่วนคะแนนที่เหลือเมื่อห่างออกไป 1 Hop,
 $w[\mathrm{EventID}]$ คือน้ำหนักของ Event แต่ละชนิด (0--1) ที่บอกว่า Event ชนิดนั้นช่วยการวิเคราะห์ได้มากเพียงใด,
 $\Delta t$ คือเวลาที่ห่างจาก Alert (วินาที) และ $\tau$ คือช่วงเวลาที่คะแนนลดลงเหลือประมาณ $1/e$ (ราว $1/3$)
-ค่าพารามิเตอร์ที่ใช้ในปัจจุบันแสดงในตารางที่~\ref{tab:score-param}
-ซึ่งยังเป็นค่าตั้งต้นที่ต้องปรับจูนในการทดลองขั้นต่อไป
-ตัวอย่างการคำนวณคะแนนแสดงในตารางที่~\ref{tab:score-example}
+ค่าเริ่มต้นของพารามิเตอร์แสดงในตารางที่~\ref{tab:score-param}
+และตัวอย่างการคำนวณคะแนนแสดงในตารางที่~\ref{tab:score-example}
 
-สมการ~\eqref{eq:score} เป็นต้นแบบ (Prototype) ของฟังก์ชันให้คะแนน ไม่ใช่รูปแบบสุดท้าย
 การรวมปัจจัยแบบผลคูณทำให้ Event ที่มีปัจจัยใดปัจจัยหนึ่งต่ำได้คะแนนต่ำโดยรวม
-ในขั้นต่อไปคณะผู้จัดทำจะทดลองเปรียบเทียบรูปแบบอื่นบน Development Set
+แนวทางการปรับจูนที่จะทดลองบน Development Set ได้แก่ การเปรียบเทียบกับรูปแบบอื่น
 เช่น การรวมแบบผลรวมถ่วงน้ำหนัก (Weighted Sum) การตัดปัจจัยใดปัจจัยหนึ่งออกเพื่อดูผลของแต่ละปัจจัย (Ablation)
 และวิธีนับระยะของ Events ที่แนบผ่าน Process Access
 โดยใช้ Evidence Recall และความถูกต้องของ LLM บน Development Set เป็นเกณฑ์เลือก
@@ -473,7 +509,7 @@ $\Delta t$ คือเวลาที่ห่างจาก Alert (วิน�
 
 \begin{table}[ht]
   \centering
-  \caption{ค่าพารามิเตอร์ตั้งต้นของการให้คะแนน}
+  \caption{ค่าพารามิเตอร์เริ่มต้นของการให้คะแนน (จะปรับจูนบน Development Set ภายหลัง)}
   \label{tab:score-param}
   \begin{tabular}{|c|c|l|}
     \hline
@@ -505,7 +541,7 @@ $\Delta t$ คือเวลาที่ห่างจาก Alert (วิน�
   วิธีนับระยะของ EID 10 จะปรับในการทดลองขั้นต่อไป\par}
 \end{table}
 
-\subsection{Top-$k$ ขั้นที่ 4 -- Budget: คัดเลือกภายใต้งบประมาณ Token}
+\topkstep{iv. Budget -- คัดเลือกภายใต้งบประมาณ Token}
 เพื่อจำกัดจำนวน Token ให้พอดีกับ Context Window ของโมเดล และให้ LLM เห็นเฉพาะ Events ที่สำคัญที่สุดก่อน
 ขั้นตอน Budget ทำงาน 3 ข้อ ดังนี้
 \begin{enumerate}
@@ -516,7 +552,8 @@ $\Delta t$ คือเวลาที่ห่างจาก Alert (วิน�
 ตัวอย่างเช่น หากกำหนดโควตา $B = 400$ Tokens และแต่ละ Event ใช้ประมาณ 100--130 Tokens
 จะมีเพียงประมาณ 3 Events แรกเท่านั้นที่ถูกส่งต่อไปยังขั้นตอนถัดไป
 
-\section{ขั้นตอนที่ 4: Representation}
+\subsection{ขั้นตอนที่ 4: Representation}
+\label{sec:step-rep}
 
 Representation ตอบคำถามว่า \emph{``จะนำเสนอ Logs ที่คัดเลือกแล้วให้ LLM ในรูปแบบใดจึงเหมาะสมที่สุด''}
 เนื่องจากข้อมูลชุดเดียวกันเขียนต่างรูปแบบกันจะได้จำนวน Token และความเข้าใจของ LLM ที่ต่างกัน
@@ -548,7 +585,8 @@ Representation ตอบคำถามว่า \emph{``จะนำเสน�
 ในการทดลองปัจจุบันโครงงานเลือกใช้รูปแบบ JSON เนื่องจากได้มาโดยตรงจากขั้นตอนก่อนหน้า
 ส่วนการเปรียบเทียบ Accuracy ระหว่างรูปแบบต่าง ๆ จะดำเนินการในการทดลอง E2 (หัวข้อ~\ref{sec:main-exp})
 
-\section{ขั้นตอนที่ 5: Retrieval-Augmented Generation (RAG)}
+\subsection{ขั้นตอนที่ 5: Retrieval-Augmented Generation (RAG)}
+\label{sec:step-rag}
 
 RAG ทำหน้าที่เพิ่มบริบทให้ LLM โดยอ้างอิงองค์ความรู้จาก MITRE ATT\&CK
 ฐานความรู้สร้างจากเอกสาร MITRE ATT\&CK Enterprise v19.2 (STIX ทางการ)
@@ -574,7 +612,8 @@ Query ที่ใช้ค้นหาในฐานความรู้ม�
 (2) ให้ LLM แปลง Representation Log เป็นคำอธิบายพฤติกรรมภาษาอังกฤษ (Log Summary) ก่อน
 โดยห้ามใช้ชื่อหรือรหัสเทคนิค ผลลัพธ์ของ RAG คือรายการ Top-$k$ Techniques ที่ใช้เป็น Context ให้ LLM
 
-\section{ขั้นตอนที่ 6: LLM Analysis และ Output}
+\subsection{ขั้นตอนที่ 6: LLM Analysis และ Output}
+\label{sec:step-llm}
 
 LLM ที่ใช้คือ Qwen3.5:9B ทำงานภายในเครื่องผ่าน Ollama ร่วมกับ Hermes เป็น Harness
 LLM รับ Context จาก RAG และ Representation Log แล้วระบุเทคนิคการโจมตี
@@ -590,9 +629,11 @@ $\rightarrow$ ระบุ Sub-technique ที่ตรงกับรูปแ
 ผลลัพธ์สุดท้ายคือ Investigation Report ที่ระบุเทคนิค ATT\&CK หลักฐาน (Event ที่อ้างอิง) และเหตุผลประกอบ
 
 \section{ต้นแบบ Web Dashboard}
+\label{sec:dashboard}
 
 ผลการวิเคราะห์ถูกนำเสนอให้ SOC Analyst ผ่าน Web Dashboard
-ซึ่งรองรับการรับข้อมูล 2 แบบ คือ ดึง Alert จาก Splunk อัตโนมัติ และอัปโหลดไฟล์ Logs ด้วยตนเอง (Manual Investigation)
+ซึ่งออกแบบให้รับข้อมูลได้ 2 แบบ คือ อัปโหลดไฟล์ Logs ด้วยตนเอง (Manual Investigation) ซึ่งเป็นแบบที่ใช้ในระยะนี้
+และรับ Alert จาก SIEM อัตโนมัติ ซึ่งจะพัฒนาในระยะถัดไป
 หน้า Inbox (รูปที่~\ref{fig:dashboard}) แสดงรายการการสืบสวนทั้งหมด พร้อมแหล่งที่มา ความรุนแรง เวลา
 ชื่อ Alert และ Host สถานะการประมวลผลของ LLM (Pending, Processing, Analyzed, Failed)
 ผลลัพธ์ (เทคนิคที่ระบุได้) และผู้รับผิดชอบ
