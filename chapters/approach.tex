@@ -322,7 +322,7 @@ Alert ของแต่ละกรณีทดสอบจึงกำหน�
 \label{sec:step-input}
 
 ในระยะ Project Survey นี้ Pipeline ยังไม่ได้ดึงข้อมูลจาก SIEM โดยตรง
-แต่รับ Raw Logs เป็นไฟล์จากชุดข้อมูล (\texttt{.xml}, \texttt{.json}, \texttt{.jsonl} หรือ \texttt{.zip} ที่รวมหลายไฟล์)
+แต่รับ Raw Logs เป็นไฟล์จากชุดข้อมูล (\texttt{.xml}, \texttt{.json})
 และรับ Alert จากไฟล์กรณีทดสอบ ซึ่งระบุ Event ที่ใช้เป็น Anchor (หัวข้อที่~\ref{sec:alert})
 ระบบอ่าน Logs ทุกไฟล์ของกรณีเดียวกันแล้วรวมเป็นชุด Events เดียวที่เรียงตามเวลา
 Output ของขั้นตอนนี้คือ Events ทั้งหมดของกรณีทดสอบพร้อมจำนวน Events ที่จะส่งต่อไปยังขั้นตอน Normalize
