@@ -44,7 +44,10 @@
 %% ช่วยลดปัญหาบรรทัดล้นขอบ (overfull hbox) จากการตัดคำภาษาไทย
 \setlength{\emergencystretch}{3em}
 
-\bibliographystyle{plain}
+%% ไม่ตัดคำภาษาอังกฤษด้วยขีด (-) ตอนท้ายบรรทัด เช่น Inves-tigation
+\hyphenpenalty=10000
+
+\bibliographystyle{unsrt} % เรียงเลขอ้างอิงตามลำดับที่ปรากฏในเนื้อหา
 
 \begin{document}
 \include{chapters/frontmatter}
