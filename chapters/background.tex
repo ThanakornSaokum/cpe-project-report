@@ -14,9 +14,9 @@ SIEM คือระบบที่รวบรวม Logs และเหตุ
 เมื่อพบพฤติกรรมที่ตรงกับกฎการตรวจจับ (Detection Rule)
 SIEM จึงเป็นเครื่องมือหลักของศูนย์ปฏิบัติการด้านความปลอดภัย (Security Operations Center: SOC)
 
-ในโครงงานนี้ใช้ \textbf{Splunk Enterprise} เป็นระบบ SIEM
-โดย Logs ถูกจัดเก็บเป็นดัชนี (Index) และสามารถเรียกค้นได้ด้วยภาษา Search Processing Language (SPL)
-หรือผ่าน REST API ซึ่ง Pipeline ของโครงงานใช้สำหรับดึง Logs ที่เกี่ยวข้องกับ Alert
+% ในโครงงานนี้ใช้ \textbf{Splunk Enterprise} เป็นระบบ SIEM
+% โดย Logs ถูกจัดเก็บเป็นดัชนี (Index) และสามารถเรียกค้นได้ด้วยภาษา Search Processing Language (SPL)
+% หรือผ่าน REST API ซึ่ง Pipeline ของโครงงานใช้สำหรับดึง Logs ที่เกี่ยวข้องกับ Alert
 
 \subsection{Detection Rule และ ES Content Update (ESCU)}
 Alert ใน Splunk เกิดจาก Detection Rule ซึ่งเป็นคำค้น SPL ที่ทำงานตามเงื่อนไข
@@ -269,10 +269,10 @@ Parent สร้าง Child (Sysmon EID 1) และ Process หนึ่งส
 และ\textbf{ข้อมูลประกอบ} คือ Confusion Matrix ของ Alert
 การจับคู่ตัวชี้วัดกับวัตถุประสงค์แต่ละข้อแสดงในตารางที่~\ref{tab:exp-metrics}
 
-เนื่องจากจำนวนกรณีทดสอบมีจำกัด ค่าความถูกต้องจะรายงานพร้อมช่วงความเชื่อมั่น 95\%
-ด้วยวิธี Bootstrap~\cite{efron1979} และเปรียบเทียบแต่ละรูปแบบการทดลองกับ Baseline
-ด้วย McNemar's Test~\cite{mcnemar1947} ซึ่งเหมาะกับผลแบบถูก/ผิดที่ทดสอบบนชุดกรณีเดียวกัน
-โดยปรับค่า $p$ ด้วยวิธีของ Holm~\cite{holm1979} เมื่อทดสอบหลายคู่พร้อมกัน
+% เนื่องจากจำนวนกรณีทดสอบมีจำกัด ค่าความถูกต้องจะรายงานพร้อมช่วงความเชื่อมั่น 95\%
+% ด้วยวิธี Bootstrap~\cite{efron1979} และเปรียบเทียบแต่ละรูปแบบการทดลองกับ Baseline
+% ด้วย McNemar's Test~\cite{mcnemar1947} ซึ่งเหมาะกับผลแบบถูก/ผิดที่ทดสอบบนชุดกรณีเดียวกัน
+% โดยปรับค่า $p$ ด้วยวิธีของ Holm~\cite{holm1979} เมื่อทดสอบหลายคู่พร้อมกัน
 
 \section{\ifenglish%
 \ifcpe CPE \else ISNE \fi knowledge used, applied, or integrated in this project
