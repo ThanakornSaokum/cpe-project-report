@@ -358,17 +358,11 @@ Event Selection ตอบคำถามว่า \emph{``จะส่งเห�
 โครงงานเปรียบเทียบวิธี Event Selection 5 วิธี โดย 4 วิธีแรกเป็นแนวทางพื้นฐาน
 และวิธีที่ 5 (Top-$k$ Relevant Events) เป็นวิธีที่โครงงานนำเสนอ
 
+\Needspace{0.65\textheight}
 \subsubsection{วิธี Event Selection ที่นำมาเปรียบเทียบ}
 \label{sec:es-baselines}
+\noindent\begin{minipage}{\textwidth}
 แนวคิดของแต่ละวิธีแสดงในรูปที่~\ref{fig:es-methods} และข้อดีข้อเสียสรุปในตารางที่~\ref{tab:es-methods}
-
-\begin{figure}[htbp]
-  \centering
-  \includegraphics[width=\textwidth]{event_selection_methods.png}
-  \caption{แนวคิดของวิธี Event Selection แบบที่ 1--4 (แถบสีเขียวคือ Event ที่ถูกเลือก)}
-  \label{fig:es-methods}
-\end{figure}
-
 \begin{enumerate}
   \item \textbf{Alert Only} -- ใช้เฉพาะข้อมูลจาก Alert
   \item \textbf{Single Event} -- ดึงเฉพาะ Event เดียวที่ Alert ชี้
@@ -378,6 +372,14 @@ Event Selection ตอบคำถามว่า \emph{``จะส่งเห�
   \item \textbf{Top-$k$ Relevant Events} -- ให้คะแนนความเกี่ยวข้องกับทุก Event ในขอบเขตที่กำหนด
         แล้วเลือกเฉพาะ Events ที่มีคะแนนสูงสุดภายใต้งบประมาณ Token
 \end{enumerate}
+
+\centering
+\includegraphics[width=\textwidth,trim=45 145 68 92,clip]{event_selection_methods.pdf}
+\captionof{figure}{แนวคิดของวิธี Event Selection แบบที่ 1--5 (แถบสีเขียวคือ Event ที่ถูกเลือก
+ancestor คือ Process บรรพบุรุษ descendant คือ Process ลูกหลาน และ action คือ Process Access)}
+\label{fig:es-methods}
+\end{minipage}
+\bigskip
 
 \begin{table}[htbp]
   \centering
@@ -549,8 +551,8 @@ $\Delta t$ คือเวลาที่ห่างจาก Alert (วิน�
   \item เรียง Events ที่เหลือตามคะแนนจากมากไปน้อย
   \item ใส่ทีละ Event พร้อมนับจำนวน Token สะสม หากเกินโควตา $B$ ให้หยุด
 \end{enumerate}
-ตัวอย่างเช่น หากกำหนดโควตา $B = 400$ Tokens และแต่ละ Event ใช้ประมาณ 100--130 Tokens
-จะมีเพียงประมาณ 3 Events แรกเท่านั้นที่ถูกส่งต่อไปยังขั้นตอนถัดไป
+ตัวอย่างเช่น หากกำหนดโควตา $B = 800$ Tokens และแต่ละ Event ในรูปแบบ JSON ใช้ประมาณ 262 Tokens
+(ตารางที่~\ref{tab:representation}) จะมีเพียง 3 Events แรกเท่านั้นที่ถูกส่งต่อไปยังขั้นตอนถัดไป
 
 \subsection{ขั้นตอนที่ 4: Representation}
 \label{sec:step-rep}
@@ -562,24 +564,28 @@ Representation ตอบคำถามว่า \emph{``จะนำเสน�
 
 \begin{figure}[ht]
   \centering
-  \includegraphics[width=\textwidth]{representation_formats.png}
+  \includegraphics[width=\textwidth]{representation_formats.pdf}
   \caption{ตัวอย่าง Event เดียวกันในรูปแบบ JSON, XML, TOON, Key=Value และ Timeline}
   \label{fig:representation}
 \end{figure}
 
 \begin{table}[ht]
   \centering
-  \caption{จำนวน Token โดยประมาณของ Event ตัวอย่าง (Sysmon EID 1) ในแต่ละรูปแบบ}
+  \caption{จำนวน Token ของ Event ตัวอย่าง (Sysmon EID 1 ของ T1087.001) ในแต่ละรูปแบบ}
   \label{tab:representation}
   \begin{tabular}{|l|c|l|}
     \hline
-    \textbf{รูปแบบ} & \textbf{Tokens (ประมาณ)} & \textbf{ลักษณะ} \\ \hline
-    Timeline   & 35  & บรรทัดเดียว กระชับที่สุด แต่ข้อมูลบางส่วนหายไป \\ \hline
-    TOON       & 119 & ตัด \{\} และ "" ออกจาก JSON \\ \hline
-    Key=Value  & 120 & รูปแบบที่ Splunk แสดงผล \\ \hline
-    JSON       & 138 & Output ของขั้นตอน Normalize (ใช้ในการทดลองปัจจุบัน) \\ \hline
-    XML        & 195 & รูปแบบต้นฉบับของ Sysmon \\ \hline
+    \textbf{รูปแบบ} & \textbf{Tokens} & \textbf{ลักษณะ} \\ \hline
+    Timeline   & 56  & บรรทัดเดียว กระชับที่สุด แต่ข้อมูลบางส่วนหายไป \\ \hline
+    Key=Value  & 211 & รูปแบบที่ Splunk แสดงผล \\ \hline
+    TOON       & 229 & ตัด \{\} และเครื่องหมายคำพูดที่ไม่จำเป็นออกจาก JSON \\ \hline
+    JSON       & 262 & Output ของขั้นตอน Normalize (ใช้ในการทดลองปัจจุบัน) \\ \hline
+    XML        & 324 & โครงสร้างแบบ Sysmon XML \\ \hline
   \end{tabular}
+
+  \vspace{1mm}
+  {\footnotesize หมายเหตุ: นับด้วย Tokenizer ของ Qwen3.5:9B (ค่า \texttt{prompt\_eval\_count} จาก Ollama)
+  ทุกรูปแบบมี Field ชุดเดียวกัน 12 Field ยกเว้น Timeline ที่เลือกเฉพาะ Field สำคัญ\par}
 \end{table}
 
 ในการทดลองปัจจุบันโครงงานเลือกใช้รูปแบบ JSON เนื่องจากได้มาโดยตรงจากขั้นตอนก่อนหน้า

@@ -12,8 +12,8 @@
 \section{การทดลองเบื้องต้น: ส่ง Raw Logs ให้ LLM วิเคราะห์โดยตรง}
 
 \subsection{วิธีการทดลอง}
-การทดลองนี้ดำเนินการก่อนการนำเสนอความก้าวหน้าครั้งที่ 1 โดยดึง Windows Sysmon Logs ของชุดข้อมูล T1087.001 จาก Splunk ผ่าน REST API
-ได้เป็นไฟล์ JSON Lines จำนวน 11,090 Events (ข้อมูลต้นฉบับในรูปแบบ XML มีขนาดประมาณ 16.8 MB)
+การทดลองนี้ดึง Windows Sysmon Logs ของชุดข้อมูล T1087.001 จาก Splunk Attack Data
+ได้เป็นไฟล์ในรูปแบบ XML มีจำนวน 11,090 Events มีขนาดประมาณ 16.8 MB
 ซึ่งมีขนาดใหญ่กว่า Context Window ของ LLM ทั่วไป
 แล้วอัปโหลดไฟล์ให้ LLM เชิงพาณิชย์ 3 โมเดลวิเคราะห์โดยตรง
 ด้วยคำถามว่า ``นี่คือ Attack Technique อะไร เพราะอะไรถึงคิดแบบนั้น''
@@ -47,7 +47,6 @@
 การทดลองนี้มีวัตถุประสงค์เพื่อตรวจสอบว่า เมื่อ Input ผ่าน Event Selection แล้ว
 LLM ขนาดเล็ก (Qwen3.5:9B) ยังจำเป็นต้องใช้ RAG หรือไม่
 และ Query รูปแบบใดเหมาะกับการค้นหาในฐานความรู้ ATT\&CK
-โดยดำเนินการหลังการนำเสนอความก้าวหน้าครั้งที่ 1 และก่อนการนำเสนอครั้งที่ 2 (12--16 ตุลาคม 2569)
 
 Input ของการทดลองคือผลลัพธ์จาก Event Selection แบบ Top-$k$ ของชุดข้อมูล T1087.001
 ซึ่งลดจำนวน Events จาก 11,090 Events เหลือ 16 Events
@@ -57,7 +56,7 @@ Input ของการทดลองคือผลลัพธ์จาก E
 และ EID 10 จำนวน 13 Events
 ในการทดลองนำร่อง Anchor ถูกกำหนดเองที่ Event ของคำสั่ง \texttt{net users}
 ส่วนการทดลองหลักใช้ Alert ที่สร้างจาก ESCU ตามหัวข้อที่~\ref{sec:alert}
-โดยแต่ละ Event ใช้ประมาณ 100--130 Tokens (หัวข้อที่~\ref{sec:topk})
+โดย Event ชนิด EID 1 ในรูปแบบ JSON ใช้ประมาณ 262 Tokens ต่อ Event (ตารางที่~\ref{tab:representation})
 การทดลองใช้ Embedding Model \texttt{qwen3-embedding:0.6b} และฐานความรู้ ATT\&CK v19.2 (697 Chunks)
 ตามที่อธิบายในบทที่ 3
 และตั้งค่า Temperature = 0 ปิดโหมด Thinking และ Context Window 16,384 Tokens เช่นเดียวกับการทดลองหลัก
@@ -133,7 +132,8 @@ Input ของการทดลองคือผลลัพธ์จาก E
 \label{sec:baseline-ofat}
 Baseline ของการทดลองคือ Event Selection แบบ Top-$k$ ที่งบประมาณ $B^{*}$
 นำเสนอในรูปแบบ JSON และส่งให้ LLM โดยตรงโดยไม่ใช้ RAG (Direct-Log)
-โดย $B^{*}$ คือค่า $B \in \{500, 1{,}000, 2{,}000, 4{,}000\}$ Tokens ที่ได้ Exact Match Accuracy สูงสุดบน Development Set (หากเท่ากันเลือกค่า $B$ ที่น้อยกว่า)
+โดย $B$ คืองบประมาณ Token ของขั้นตอน Budget (หัวข้อที่~\ref{sec:topk})
+และ $B^{*}$ (งบประมาณที่ดีที่สุด) คือค่า $B \in \{500, 1{,}000, 2{,}000, 4{,}000\}$ Tokens ที่ได้ Exact Match Accuracy สูงสุดบน Development Set ใน E1 (หากเท่ากันเลือกค่า $B$ ที่น้อยกว่า)
 ค่า $B$ สูงสุดกำหนดที่ 4,000 Tokens เพราะ Context Window ขนาด 16,384 Tokens
 ต้องเผื่อพื้นที่ให้ Prompt ผลลัพธ์จาก RAG ($k=10$ ประมาณ $10 \times 280$ Tokens) และคำตอบของโมเดล
 และการเพิ่มค่าทีละสองเท่าช่วยให้เห็นจุดที่ความถูกต้องหยุดเพิ่มขึ้น
@@ -160,11 +160,14 @@ E2 เปรียบเทียบรูปแบบ Representation (หัว
     \hline
     \textbf{ชุด} & \textbf{คำถามที่ต้องการตอบ} & \textbf{ปัจจัยที่เปลี่ยน} & \textbf{ปัจจัยที่คงไว้} \\ \hline
     E1 & Event Selection วิธีใดได้ความถูกต้องดีที่สุดเมื่อเทียบกับ Token ที่ใช้ & 5 วิธี (Top-$k$ 4 ค่า $B$) & JSON, ไม่ใช้ RAG \\ \hline
-    E2 & รูปแบบการนำเสนอมีผลต่อความถูกต้องและ Token หรือไม่ & 5 รูปแบบ & Top-$k$ ที่ $B^{*}$, ไม่ใช้ RAG \\ \hline
+    E2 & Representation มีผลต่อความถูกต้องและ Token หรือไม่ & 5 รูปแบบ & Top-$k$ ที่ $B^{*}$, ไม่ใช้ RAG \\ \hline
     E3 & RAG ช่วยให้ LLM ขนาดเล็กถูกต้องขึ้นหรือไม่ และควรใช้แบบใด & 5 เงื่อนไข & Top-$k$ ที่ $B^{*}$, JSON \\ \hline
     R0 & Investigation Context ดีกว่าการส่ง Raw Logs หรือไม่ & ข้อมูลนำเข้าเป็น Raw Logs ในช่วง $\pm T$ & ไม่ใช้ RAG \\ \hline
     Final & วิธีที่ดีที่สุดของแต่ละชุดทำงานร่วมกันได้ดีหรือไม่ & ใช้วิธีที่ดีที่สุดของ E1--E3 พร้อมกัน & -- \\ \hline
   \end{tabular}
+
+  \vspace{1mm}
+  {\footnotesize หมายเหตุ: $B^{*}$ คืองบประมาณ Token ของ Top-$k$ ที่ได้ Exact Match Accuracy สูงสุดบน Development Set ใน E1\par}
 \end{table}
 
 อย่างไรก็ตาม การทดลองแบบ OFAT มีข้อจำกัดคือไม่สามารถศึกษาปฏิสัมพันธ์ระหว่างปัจจัย (Interaction) ได้
@@ -243,11 +246,11 @@ E2 ใช้ Top-$k$ ที่ $B^{*}$ และไม่ใช้ RAG แล้
   \begin{tabular}{|l|l|c|}
     \hline
     \textbf{รหัส} & \textbf{รูปแบบ} & \textbf{Tokens ต่อ Event (ตารางที่~\ref{tab:representation})} \\ \hline
-    Baseline & JSON & $\approx$ 138 \\ \hline
-    E2-1 & XML & $\approx$ 195 \\ \hline
-    E2-2 & TOON & $\approx$ 119 \\ \hline
-    E2-3 & Key=Value & $\approx$ 120 \\ \hline
-    E2-4 & Timeline & $\approx$ 35 \\ \hline
+    Baseline & JSON & 262 \\ \hline
+    E2-1 & XML & 324 \\ \hline
+    E2-2 & TOON & 229 \\ \hline
+    E2-3 & Key=Value & 211 \\ \hline
+    E2-4 & Timeline & 56 \\ \hline
   \end{tabular}
 \end{table}
 
@@ -332,20 +335,21 @@ Context Window 16,384 Tokens, Embedding Model \texttt{qwen3-embedding:0.6b},
   \caption{จำนวนรูปแบบการทดลองและจำนวนครั้งที่รันบน Development Set และ Test Set}
   \label{tab:exp-runs}
   \small
-  \begin{tabular}{|l|c|c|c|}
+  \begin{tabular}{|L{0.14\textwidth}|L{0.28\textwidth}|c|c|c|}
     \hline
-    \textbf{ชุดการทดลอง} & \textbf{จำนวนรูปแบบ} & \textbf{Dev (38 กรณี)} & \textbf{Test (42 กรณี)} \\ \hline
-    E1 (รวม Baseline) & 8 & 304 & 336 \\ \hline
-    E2 & 4 & 152 & 168 \\ \hline
-    E3 & 4 & 152 & 168 \\ \hline
-    R0 & 1 & -- & 42 \\ \hline
-    Final Configuration & ไม่เกิน 1 & -- & ไม่เกิน 42 \\ \hline
-    \textbf{รวม} & \textbf{ไม่เกิน 18} & \textbf{608} & \textbf{ไม่เกิน 756} \\ \hline
-    \multicolumn{2}{|l|}{สร้างย่อหน้าสรุป (E3)} & 38 & 42 \\ \hline
+    \textbf{ชุดการทดลอง} & \textbf{รูปแบบที่รวม} & \textbf{จำนวนรูปแบบ} & \textbf{Dev (38 กรณี)} & \textbf{Test (42 กรณี)} \\ \hline
+    E1 (รวม Baseline) & E1-1 ถึง E1-8: Alert Only, Single Event, Time Window, Multiple Related และ Top-$k$ ที่ $B$ 4 ค่า (ตารางที่~\ref{tab:exp-e1}) & 8 & 304 & 336 \\ \hline
+    E2 & E2-1 ถึง E2-4: XML, TOON, Key=Value และ Timeline (ตารางที่~\ref{tab:exp-e2}) & 4 & 152 & 168 \\ \hline
+    E3 & E3-1 ถึง E3-4: Direct-Summary, RAG-Log ($k$ = 10 และ 5) และ RAG-Summary (ตารางที่~\ref{tab:exp-e3}) & 4 & 152 & 168 \\ \hline
+    R0 & Raw Logs ในช่วง $\pm T$ (หัวข้อที่~\ref{sec:exp-r0}) & 1 & -- & 42 \\ \hline
+    Final Configuration & วิธีที่ดีที่สุดของ E1--E3 (หัวข้อที่~\ref{sec:exp-final}) & ไม่เกิน 1 & -- & ไม่เกิน 42 \\ \hline
+    \textbf{รวม} & & \textbf{ไม่เกิน 18} & \textbf{608} & \textbf{ไม่เกิน 756} \\ \hline
+    \multicolumn{3}{|l|}{สร้างย่อหน้าสรุป (E3)} & 38 & 42 \\ \hline
   \end{tabular}
 
   \vspace{1mm}
-  {\footnotesize หมายเหตุ: Final Configuration ประกอบจากผลบน Development Set ของ E1--E3
+  {\footnotesize หมายเหตุ: E2 และ E3 นับ 4 รูปแบบ เพราะ Baseline (JSON และ Direct-Log) คือ Top-$k$ ที่ $B^{*}$
+  ซึ่งนับรวมอยู่ใน E1 แล้ว ส่วน Final Configuration ประกอบจากผลบน Development Set ของ E1--E3
   จึงไม่ต้องรันบน Development Set แยก\par}
 \end{table}
 
@@ -355,6 +359,7 @@ Context Window 16,384 Tokens, Embedding Model \texttt{qwen3-embedding:0.6b},
 และเปรียบเทียบความถูกต้องด้วย McNemar's Test ไม่เกิน 18 คู่ (17 รูปแบบเทียบกับ Baseline และ Final Configuration เทียบกับ R0)
 โดยปรับค่า $p$ ด้วยวิธีของ Holm
 ส่วนจำนวน Token และ Latency เป็นค่าต่อเนื่อง จึงรายงานเป็นค่ามัธยฐานต่อกรณี
+โดยจำนวน Input Tokens นับจากค่า \texttt{prompt\_eval\_count} ที่ Ollama คืนมา ซึ่งเป็น Tokenizer ของ Qwen3.5:9B ที่ใช้จริง
 นอกจากนี้จะรายงานผลแยกตามเทคนิค แยกกรณีที่ใช้ Anchor สำรองออกจากกรณีที่มี Alert จริง
 และแยกตามกรณี A/B/C ของ Lineage (หัวข้อที่~\ref{sec:traverse})
 
